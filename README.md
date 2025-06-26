@@ -1,94 +1,219 @@
-# Obsidian Sample Plugin
+# Obsius 🤖
 
-This is a sample plugin for Obsidian (https://obsidian.md).
+**AI Agent for Obsidian - Your intelligent writing and knowledge management assistant**
 
-This project uses TypeScript to provide type checking and documentation.
-The repo depends on the latest plugin API (obsidian.d.ts) in TypeScript Definition format, which contains TSDoc comments describing what it does.
+Obsius is an AI-powered plugin for Obsidian that provides a CLI-style agent interface similar to ClaudeCode, Gemini CLI, and OpenHands. It enables natural language interaction with your Obsidian vault through a chat-based interface while maintaining the familiar experience of AI assistants.
 
-This sample plugin demonstrates some of the basic functionality the plugin API can do.
-- Adds a ribbon icon, which shows a Notice when clicked.
-- Adds a command "Open Sample Modal" which opens a Modal.
-- Adds a plugin setting tab to the settings page.
-- Registers a global click event and output 'click' to the console.
-- Registers a global interval which logs 'setInterval' to the console.
+## ✨ Features
 
-## First time developing plugins?
+- **🗣️ Natural Language Interface**: Chat with AI to manage your notes and vault
+- **🔧 Obsidian-Native Operations**: Create, search, update, and organize notes through AI commands
+- **🔀 Multi-Provider Support**: Works with Claude, GPT, Gemini, and local models
+- **📡 Real-time Streaming**: Live responses with progressive content generation
+- **🛡️ Security-First**: Risk assessment and user confirmation for sensitive operations
+- **🎯 Context-Aware**: Understands your current note, selection, and workspace state
+- **💾 Session Management**: Persistent conversations with intelligent history management
 
-Quick starting guide for new plugin devs:
+## 🎯 Project Goals
 
-- Check if [someone already developed a plugin for what you want](https://obsidian.md/plugins)! There might be an existing plugin similar enough that you can partner up with.
-- Make a copy of this repo as a template with the "Use this template" button (login to GitHub if you don't see it).
-- Clone your repo to a local development folder. For convenience, you can place this folder in your `.obsidian/plugins/your-plugin-name` folder.
-- Install NodeJS, then run `npm i` in the command line under your repo folder.
-- Run `npm run dev` to compile your plugin from `main.ts` to `main.js`.
-- Make changes to `main.ts` (or create new `.ts` files). Those changes should be automatically compiled into `main.js`.
-- Reload Obsidian to load the new version of your plugin.
-- Enable plugin in settings window.
-- For updates to the Obsidian API run `npm update` in the command line under your repo folder.
+Obsius aims to provide the **efficiency of ClaudeCode with the knowledge management power of Obsidian**:
 
-## Releasing new releases
+- **Simplicity**: Easy-to-use chat interface without complex configuration
+- **Efficiency**: Dramatically faster note operations through natural language
+- **Intelligence**: Context-aware operations that understand your workspace
+- **Safety**: Transparent AI actions with user control and confirmation
+- **Extensibility**: Plugin-based architecture for custom tools and providers
 
-- Update your `manifest.json` with your new version number, such as `1.0.1`, and the minimum Obsidian version required for your latest release.
-- Update your `versions.json` file with `"new-plugin-version": "minimum-obsidian-version"` so older versions of Obsidian can download an older version of your plugin that's compatible.
-- Create new GitHub release using your new version number as the "Tag version". Use the exact version number, don't include a prefix `v`. See here for an example: https://github.com/obsidianmd/obsidian-sample-plugin/releases
-- Upload the files `manifest.json`, `main.js`, `styles.css` as binary attachments. Note: The manifest.json file must be in two places, first the root path of your repository and also in the release.
-- Publish the release.
+## 🚀 Quick Start
 
-> You can simplify the version bump process by running `npm version patch`, `npm version minor` or `npm version major` after updating `minAppVersion` manually in `manifest.json`.
-> The command will bump version in `manifest.json` and `package.json`, and add the entry for the new version to `versions.json`
+### Prerequisites
 
-## Adding your plugin to the community plugin list
+- Obsidian v1.4.0 or higher
+- Node.js v16 or higher
 
-- Check the [plugin guidelines](https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines).
-- Publish an initial version.
-- Make sure you have a `README.md` file in the root of your repo.
-- Make a pull request at https://github.com/obsidianmd/obsidian-releases to add your plugin.
+### Installation (Development)
 
-## How to use
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/your-username/obsius.git
+   cd obsius
+   ```
 
-- Clone this repo.
-- Make sure your NodeJS is at least v16 (`node --version`).
-- `npm i` or `yarn` to install dependencies.
-- `npm run dev` to start compilation in watch mode.
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
-## Manually installing the plugin
+3. **Start development**
+   ```bash
+   npm run dev
+   ```
 
-- Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
+4. **Setup in Obsidian**
+   - Copy the built plugin to your vault's `.obsidian/plugins/obsius/` folder
+   - Enable the plugin in Obsidian settings
+   - Configure your AI provider API key in plugin settings
 
-## Improve code quality with eslint (optional)
-- [ESLint](https://eslint.org/) is a tool that analyzes your code to quickly find problems. You can run ESLint against your plugin to find common bugs and ways to improve your code. 
-- To use eslint with this project, make sure to install eslint from terminal:
-  - `npm install -g eslint`
-- To use eslint to analyze this project use this command:
-  - `eslint main.ts`
-  - eslint will then create a report with suggestions for code improvement by file and line number.
-- If your source code is in a folder, such as `src`, you can use eslint with this command to analyze all files in that folder:
-  - `eslint .\src\`
+### Quick Setup
 
-## Funding URL
+1. **Open Obsius**: Click the robot icon in the ribbon or use `Ctrl+P` → "Obsius: Open AI Chat"
+2. **Configure Provider**: Go to Settings → Obsius and add your API key (Claude, OpenAI, or Gemini)
+3. **Start Chatting**: Begin with simple commands like:
+   - "Create a note about machine learning"
+   - "Search for notes about productivity"
+   - "Update my daily note with today's thoughts"
 
-You can include funding URLs where people who use your plugin can financially support it.
+## 💬 Example Usage
 
-The simple way is to set the `fundingUrl` field to your link in your `manifest.json` file:
+```
+You: Create a note about TypeScript best practices
 
-```json
-{
-    "fundingUrl": "https://buymeacoffee.com"
-}
+Obsius: I'll create a comprehensive note about TypeScript best practices for you.
+
+✅ Created note: "TypeScript Best Practices.md"
+   Path: TypeScript Best Practices.md
+   Content: Structured guide with sections on type safety, interfaces, generics, and more.
+
+You: Find all notes related to programming
+
+Obsius: I found 12 notes related to programming:
+
+📄 JavaScript Fundamentals.md
+📄 React Development Guide.md
+📄 TypeScript Best Practices.md
+...
+
+Would you like me to create a summary of all programming notes?
 ```
 
-If you have multiple URLs, you can also do:
+## 🏗️ Architecture
 
-```json
-{
-    "fundingUrl": {
-        "Buy Me a Coffee": "https://buymeacoffee.com",
-        "GitHub Sponsor": "https://github.com/sponsors",
-        "Patreon": "https://www.patreon.com/"
-    }
-}
+Obsius follows a **simple, chat-first architecture**:
+
+```
+┌─ Chat Interface ──────────────────────────┐
+│  User Input → AI Response → Tool Actions  │
+└─────────────────┬─────────────────────────┘
+                  │
+┌─ Core Engine ───▼─────────────────────────┐
+│  ├─ Provider Manager (Claude/GPT/Gemini)  │
+│  ├─ Tool Registry (Obsidian Operations)   │
+│  ├─ Session Manager (History & Context)   │
+│  └─ Security Manager (Risk Assessment)    │
+└───────────────────────────────────────────┘
+                  │
+┌─ Obsidian API ──▼─────────────────────────┐
+│  Vault • Notes • Search • Metadata        │
+└───────────────────────────────────────────┘
 ```
 
-## API Documentation
+### Key Components
 
-See https://github.com/obsidianmd/obsidian-api
+- **Chat Interface**: React-based UI with real-time streaming
+- **Agent Orchestrator**: Coordinates AI responses and tool execution
+- **Tool System**: Extensible Obsidian operations (create, search, update, etc.)
+- **Provider System**: Multi-AI provider support with failover
+- **Security Layer**: Risk assessment and user confirmation for sensitive operations
+
+## 🛠️ Development
+
+### Development Commands
+
+```bash
+# Start development with watch mode
+npm run dev
+
+# Build for production
+npm run build
+
+# Type checking
+npm run type-check
+
+# Linting
+npm run lint
+
+# Testing
+npm run test
+```
+
+### Project Structure
+
+```
+src/
+├── core/                 # Core engine and orchestration
+│   ├── AgentOrchestrator.ts
+│   ├── ProviderManager.ts
+│   └── ToolRegistry.ts
+├── providers/            # AI provider implementations
+│   ├── AnthropicProvider.ts
+│   ├── OpenAIProvider.ts
+│   └── GeminiProvider.ts
+├── tools/               # Obsidian operation tools
+│   └── obsidian/
+│       ├── CreateNoteTool.ts
+│       └── SearchNotesTool.ts
+├── ui/                  # React components and views
+│   ├── components/
+│   └── views/
+└── utils/               # Shared utilities and types
+```
+
+### Adding New Tools
+
+```typescript
+export class CustomTool extends BaseTool {
+  name = 'custom_operation';
+  description = 'Performs a custom operation';
+  
+  async execute(params: CustomParams): Promise<ToolResult> {
+    // Your implementation here
+    return { success: true, message: 'Operation completed' };
+  }
+}
+
+// Register in ToolRegistry
+toolRegistry.register(new CustomTool());
+```
+
+## 📖 Documentation
+
+- **[Development Guide](docs/README.md)** - Comprehensive project overview
+- **[Architecture Guide](docs/architecture/)** - System design and patterns
+- **[API Reference](docs/api/)** - Tool and provider interfaces
+- **[Contributing Guide](CONTRIBUTING.md)** - How to contribute to the project
+
+## 🎯 Current Status
+
+**Phase 1 MVP** (In Development):
+- ✅ Basic chat interface
+- ✅ Multi-provider AI support  
+- 🔄 Core Obsidian tools (create, search, update)
+- ⏳ Session management
+- ⏳ Security framework
+
+See [Phase 1 Roadmap](docs/development/phase1-mvp-roadmap.md) for detailed progress.
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on:
+
+- Setting up the development environment
+- Code style and conventions
+- Testing requirements
+- Pull request process
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- **Obsidian Team** - For the amazing platform and plugin API
+- **ClaudeCode, Gemini CLI, OpenHands** - For inspiration and architectural patterns
+- **Community** - For feedback, ideas, and contributions
+
+---
+
+**Built with ❤️ for the Obsidian community**
+
+For support, feature requests, or general discussion, please [open an issue](https://github.com/your-username/obsius/issues) or join our community discussions.
