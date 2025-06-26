@@ -11,6 +11,9 @@
 	"keywords": ["obsidian", "ai", "agent", "assistant", "claude", "gpt", "productivity"],
 	"author": "Obsius Project Contributors",
 	"license": "MIT",
+	"dependencies": {
+		"zod": "^3.22.4"
+	},
 	"devDependencies": {
 		"@types/node": "^16.11.6",
 		"@typescript-eslint/eslint-plugin": "5.29.0",

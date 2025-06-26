@@ -1,134 +1,356 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+/**
+ * Obsius AI Agent - Main Plugin File
+ * 
+ * An AI agent for Obsidian that provides ClaudeCode-like functionality
+ * for efficient note management and vault operations.
+ */
 
-// Remember to rename these classes and interfaces!
+import { App, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { 
+  ToolRegistry, 
+  CreateNoteTool, 
+  ReadNoteTool, 
+  SearchNotesTool, 
+  UpdateNoteTool 
+} from './src/tools';
+import { ExecutionContext, ObsiusSettings } from './src/utils/types';
 
-interface MyPluginSettings {
-	mySetting: string;
+/**
+ * Default plugin settings
+ */
+const DEFAULT_SETTINGS: ObsiusSettings = {
+  providers: {
+    openai: {
+      name: 'OpenAI',
+      model: 'gpt-4',
+      enabled: true
+    },
+    claude: {
+      name: 'Anthropic Claude',
+      model: 'claude-3-sonnet',
+      enabled: false
+    }
+  },
+  defaultProvider: 'openai',
+  tools: {
+    enabled: ['create_note', 'read_note', 'search_notes', 'update_note'],
+    confirmationRequired: ['update_note'],
+    riskLevels: {
+      low: ['create_note', 'read_note', 'search_notes'],
+      medium: ['update_note'],
+      high: []
+    }
+  },
+  ui: {
+    theme: 'auto',
+    showTimestamps: true,
+    enableStreaming: false,
+    autoScroll: true
+  },
+  sessions: {
+    maxHistorySize: 100,
+    autoSave: true,
+    persistAcrossReloads: true
+  }
+};
+
+/**
+ * Main Obsius Plugin Class
+ */
+export default class ObsiusPlugin extends Plugin {
+  settings: ObsiusSettings;
+  toolRegistry: ToolRegistry;
+
+  async onload() {
+    console.log('Loading Obsius AI Agent plugin...');
+
+    // Load settings
+    await this.loadSettings();
+
+    // Initialize tool registry
+    this.initializeToolRegistry();
+
+    // Register commands
+    this.registerCommands();
+
+    // Add ribbon icon
+    this.addRibbonIcon('bot', 'Obsius AI Agent', () => {
+      new Notice('Obsius AI Agent is ready! Use Command Palette to access tools.');
+    });
+
+    // Add status bar
+    const statusBarItemEl = this.addStatusBarItem();
+    statusBarItemEl.setText('Obsius Ready');
+
+    // Add settings tab
+    this.addSettingTab(new ObsiusSettingTab(this.app, this));
+
+    console.log('Obsius AI Agent plugin loaded successfully!');
+  }
+
+  onunload() {
+    console.log('Unloading Obsius AI Agent plugin...');
+  }
+
+  /**
+   * Initialize the tool registry with basic Obsidian tools
+   */
+  private initializeToolRegistry(): void {
+    const context = this.createExecutionContext();
+    this.toolRegistry = new ToolRegistry(this.app, context);
+
+    // Register basic Obsidian tools
+    this.toolRegistry.registerTool('create_note', CreateNoteTool, {
+      description: 'Create a new note in the vault',
+      riskLevel: 'low',
+      category: 'obsidian',
+      enabled: this.settings.tools.enabled.includes('create_note')
+    });
+
+    this.toolRegistry.registerTool('read_note', ReadNoteTool, {
+      description: 'Read content from an existing note',
+      riskLevel: 'low',
+      category: 'obsidian',
+      enabled: this.settings.tools.enabled.includes('read_note')
+    });
+
+    this.toolRegistry.registerTool('search_notes', SearchNotesTool, {
+      description: 'Search for notes in the vault',
+      riskLevel: 'low',
+      category: 'obsidian',
+      enabled: this.settings.tools.enabled.includes('search_notes')
+    });
+
+    this.toolRegistry.registerTool('update_note', UpdateNoteTool, {
+      description: 'Update content of an existing note',
+      riskLevel: 'medium',
+      category: 'obsidian',
+      enabled: this.settings.tools.enabled.includes('update_note')
+    });
+
+    console.log('Tool registry initialized with', this.toolRegistry.getStats());
+  }
+
+  /**
+   * Create execution context for tools
+   */
+  private createExecutionContext(): ExecutionContext {
+    const activeFile = this.app.workspace.getActiveFile();
+    
+    return {
+      app: this.app,
+      currentFile: activeFile || undefined,
+      vaultPath: (this.app.vault.adapter as any).path || '',
+      workspaceState: {
+        activeFile: activeFile?.path,
+        openTabs: this.app.workspace.getLeavesOfType('markdown').map(leaf => {
+          const view = leaf.view as { file?: { path: string } };
+          return view.file?.path || '';
+        }).filter(path => path)
+      }
+    };
+  }
+
+  /**
+   * Register plugin commands
+   */
+  private registerCommands(): void {
+    // Test command for create note tool
+    this.addCommand({
+      id: 'test-create-note',
+      name: 'Test: Create Note',
+      callback: async () => {
+        const result = await this.toolRegistry.executeTool('create_note', {
+          title: 'Test Note',
+          content: 'This is a test note created by Obsius AI Agent.\n\nTimestamp: ' + new Date().toISOString(),
+          tags: ['test', 'obsius']
+        });
+
+        if (result.success) {
+          new Notice('✅ ' + result.message);
+        } else {
+          new Notice('❌ ' + result.message);
+        }
+      }
+    });
+
+    // Test command for search notes tool
+    this.addCommand({
+      id: 'test-search-notes',
+      name: 'Test: Search Notes',
+      callback: async () => {
+        const result = await this.toolRegistry.executeTool('search_notes', {
+          query: 'test',
+          limit: 5
+        });
+
+        if (result.success && result.data?.results) {
+          const count = result.data.results.length;
+          new Notice(`🔍 Found ${count} notes matching "test"`);
+          console.log('Search results:', result.data.results);
+        } else {
+          new Notice('❌ Search failed: ' + result.message);
+        }
+      }
+    });
+
+    // Test command for read current note
+    this.addCommand({
+      id: 'test-read-current-note',
+      name: 'Test: Read Current Note',
+      callback: async () => {
+        const activeFile = this.app.workspace.getActiveFile();
+        if (!activeFile) {
+          new Notice('❌ No active note to read');
+          return;
+        }
+
+        const result = await this.toolRegistry.executeTool('read_note', {
+          path: activeFile.path,
+          includeMetadata: true
+        });
+
+        if (result.success) {
+          new Notice('✅ Read note: ' + result.data?.title);
+          console.log('Note content:', result.data);
+        } else {
+          new Notice('❌ ' + result.message);
+        }
+      }
+    });
+
+    // Debug command to show tool registry status
+    this.addCommand({
+      id: 'debug-tool-registry',
+      name: 'Debug: Show Tool Registry Status',
+      callback: () => {
+        const debugInfo = this.toolRegistry.getDebugInfo();
+        console.log('🔧 Obsius Tool Registry Debug Info:', debugInfo);
+        new Notice(`🔧 Registry: ${debugInfo.enabledTools.length} tools enabled`);
+      }
+    });
+  }
+
+  /**
+   * Load plugin settings
+   */
+  async loadSettings() {
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+  }
+
+  /**
+   * Save plugin settings
+   */
+  async saveSettings() {
+    await this.saveData(this.settings);
+    
+    // Update tool registry with new settings
+    if (this.toolRegistry) {
+      this.updateToolRegistry();
+    }
+  }
+
+  /**
+   * Update tool registry based on current settings
+   */
+  private updateToolRegistry(): void {
+    const context = this.createExecutionContext();
+    this.toolRegistry.updateDefaultContext(context);
+
+    // Update tool enabled status
+    for (const toolName of this.toolRegistry.getToolNames()) {
+      const enabled = this.settings.tools.enabled.includes(toolName);
+      this.toolRegistry.setToolEnabled(toolName, enabled);
+    }
+  }
 }
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
-}
+/**
+ * Settings tab for Obsius plugin
+ */
+class ObsiusSettingTab extends PluginSettingTab {
+  plugin: ObsiusPlugin;
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+  constructor(app: App, plugin: ObsiusPlugin) {
+    super(app, plugin);
+    this.plugin = plugin;
+  }
 
-	async onload() {
-		await this.loadSettings();
+  display(): void {
+    const { containerEl } = this;
+    containerEl.empty();
 
-		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
+    containerEl.createEl('h2', { text: 'Obsius AI Agent Settings' });
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
+    // AI Provider Settings
+    containerEl.createEl('h3', { text: 'AI Provider Settings' });
 
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
+    new Setting(containerEl)
+      .setName('Default Provider')
+      .setDesc('Select the default AI provider')
+      .addDropdown(dropdown => {
+        dropdown.addOption('openai', 'OpenAI');
+        dropdown.addOption('claude', 'Anthropic Claude');
+        dropdown.setValue(this.plugin.settings.defaultProvider);
+        dropdown.onChange(async (value) => {
+          this.plugin.settings.defaultProvider = value;
+          await this.plugin.saveSettings();
+        });
+      });
 
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-			}
-		});
+    // OpenAI Settings
+    new Setting(containerEl)
+      .setName('OpenAI API Key')
+      .setDesc('Enter your OpenAI API key')
+      .addText(text => {
+        text.setPlaceholder('sk-...');
+        text.setValue(this.plugin.settings.providers.openai?.apiKey || '');
+        text.onChange(async (value) => {
+          if (!this.plugin.settings.providers.openai) {
+            this.plugin.settings.providers.openai = {
+              name: 'OpenAI',
+              model: 'gpt-4',
+              enabled: true
+            };
+          }
+          this.plugin.settings.providers.openai.apiKey = value;
+          await this.plugin.saveSettings();
+        });
+      });
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
+    // Tool Settings
+    containerEl.createEl('h3', { text: 'Tool Settings' });
 
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
-		});
+    const toolStats = this.plugin.toolRegistry?.getStats();
+    if (toolStats) {
+      containerEl.createEl('p', {
+        text: `${toolStats.enabled} tools enabled, ${toolStats.disabled} disabled`
+      });
+    }
 
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
-	}
+    // UI Settings
+    containerEl.createEl('h3', { text: 'Interface Settings' });
 
-	onunload() {
+    new Setting(containerEl)
+      .setName('Show Timestamps')
+      .setDesc('Show timestamps in chat messages')
+      .addToggle(toggle => {
+        toggle.setValue(this.plugin.settings.ui.showTimestamps);
+        toggle.onChange(async (value) => {
+          this.plugin.settings.ui.showTimestamps = value;
+          await this.plugin.saveSettings();
+        });
+      });
 
-	}
-
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-	}
-
-	async saveSettings() {
-		await this.saveData(this.settings);
-	}
-}
-
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
-
-	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
-	}
-}
-
-class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
-
-	constructor(app: App, plugin: MyPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
-
-	display(): void {
-		const {containerEl} = this;
-
-		containerEl.empty();
-
-		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
-				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
-					await this.plugin.saveSettings();
-				}));
-	}
+    new Setting(containerEl)
+      .setName('Auto Scroll')
+      .setDesc('Automatically scroll to latest messages')
+      .addToggle(toggle => {
+        toggle.setValue(this.plugin.settings.ui.autoScroll);
+        toggle.onChange(async (value) => {
+          this.plugin.settings.ui.autoScroll = value;
+          await this.plugin.saveSettings();
+        });
+      });
+  }
 }
