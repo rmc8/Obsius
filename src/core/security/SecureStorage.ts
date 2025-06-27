@@ -202,10 +202,22 @@ export class SecureStorage {
    */
   async listProviders(): Promise<string[]> {
     try {
+      console.log('🔍 SecureStorage.listProviders() called');
+      
       const container = await this.loadSecureContainer();
-      return Object.keys(container.data);
+      console.log('📦 Loaded container:', { 
+        version: container.version, 
+        created: container.created, 
+        dataKeys: Object.keys(container.data),
+        dataCount: Object.keys(container.data).length
+      });
+      
+      const providers = Object.keys(container.data);
+      console.log('📋 Providers with stored keys:', providers);
+      
+      return providers;
     } catch (error) {
-      console.error('Error listing providers:', error);
+      console.error('❌ Error listing providers:', error);
       return [];
     }
   }
@@ -252,17 +264,32 @@ export class SecureStorage {
    */
   private async loadSecureContainer(): Promise<SecureDataContainer> {
     try {
+      console.log(`🔍 Loading secure container with dataKey: ${this.config.dataKey}`);
+      
       const data = await this.plugin.loadData();
+      console.log('📂 Plugin data loaded:', { 
+        hasData: !!data, 
+        keys: data ? Object.keys(data) : [],
+        dataType: typeof data
+      });
+      
       const secureData = data?.[this.config.dataKey];
+      console.log(`🔐 Secure data for key '${this.config.dataKey}':`, {
+        hasSecureData: !!secureData,
+        secureDataType: typeof secureData,
+        secureDataKeys: secureData && typeof secureData === 'object' ? Object.keys(secureData) : 'not object'
+      });
       
       if (secureData && this.isValidContainer(secureData)) {
+        console.log('✅ Valid container found, returning existing data');
         return secureData;
       }
       
       // Return new container if none exists or invalid
+      console.log('🆕 No valid container found, creating new one');
       return this.createNewContainer();
     } catch (error) {
-      console.warn('Error loading secure container, creating new one:', error);
+      console.warn('❌ Error loading secure container, creating new one:', error);
       return this.createNewContainer();
     }
   }

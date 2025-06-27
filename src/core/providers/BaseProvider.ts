@@ -219,6 +219,13 @@ export abstract class BaseProvider {
    */
   async generateResponse(messages: AIMessage[], options: GenerationOptions = {}): Promise<AIResponse> {
     if (!this.apiKey) {
+      console.error(`❌ ${this.providerId} generateResponse called but API key not set`);
+      console.error(`🔍 Provider diagnostic:`, {
+        providerId: this.providerId,
+        hasApiKey: !!this.apiKey,
+        apiKeyType: typeof this.apiKey,
+        apiKeyLength: this.apiKey ? this.apiKey.length : 0
+      });
       throw new Error('API key not set');
     }
 

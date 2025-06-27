@@ -293,35 +293,64 @@ export class ProviderManager {
    */
   private async loadAndVerifyStoredKeys(): Promise<void> {
     try {
+      console.log('🔍 Starting loadAndVerifyStoredKeys...');
+      
       const storedProviders = await this.secureStorage.listProviders();
+      console.log('📋 Stored providers found:', storedProviders);
       
       for (const providerId of storedProviders) {
+        console.log(`🔑 Processing stored provider: ${providerId}`);
+        
         const registration = this.providers.get(providerId);
-        if (!registration) continue;
+        if (!registration) {
+          console.warn(`⚠️ Provider ${providerId} found in storage but not registered`);
+          continue;
+        }
 
         // Update configuration to reflect stored key
         registration.config.hasApiKey = true;
+        console.log(`✅ Marked ${providerId} as hasApiKey=true`);
         
         // Get metadata
         const metadata = await this.secureStorage.getApiKeyMetadata(providerId);
         if (metadata) {
           registration.config.keyPrefix = metadata.keyPrefix;
+          console.log(`📝 Set keyPrefix for ${providerId}: ${metadata.keyPrefix}`);
         }
         
         // Load the actual API key and set it in the provider
         const apiKey = await this.secureStorage.getApiKey(providerId);
+        console.log(`🔐 Retrieved API key for ${providerId}:`, apiKey ? `[${apiKey.length} chars]` : 'null');
+        
         if (apiKey) {
           registration.provider.setApiKey(apiKey);
+          console.log(`✅ Set API key in ${providerId} provider instance`);
+          
+          // Verify it was set correctly
+          const providerKey = (registration.provider as any).apiKey;
+          console.log(`🔍 Verification - provider ${providerId} has API key set:`, !!providerKey);
+        } else {
+          console.error(`❌ Failed to retrieve API key for ${providerId} despite being in stored providers list`);
         }
 
         // Trust previous authentication state for fast startup
         // Authentication will be verified when actually needed during API calls
-        console.log(`Provider ${providerId} loaded with stored API key - trusting previous auth state`);
+        console.log(`✅ Provider ${providerId} loaded with stored API key - trusting previous auth state`);
       }
 
-      console.log(`Loaded ${storedProviders.length} stored API keys`);
+      console.log(`📊 Summary: Loaded ${storedProviders.length} stored API keys`);
+      
+      // Additional verification: check each registered provider's API key status
+      console.log('🔍 Final verification of all providers:');
+      for (const [providerId, registration] of this.providers) {
+        const hasKey = !!(registration.provider as any).apiKey;
+        const configAuth = registration.config.authenticated;
+        const configHasKey = registration.config.hasApiKey;
+        console.log(`  ${providerId}: apiKey=${hasKey}, config.authenticated=${configAuth}, config.hasApiKey=${configHasKey}`);
+      }
+      
     } catch (error) {
-      console.error('Failed to load stored API keys:', error);
+      console.error('❌ Failed to load stored API keys:', error);
     }
   }
 
@@ -399,20 +428,80 @@ export class ProviderManager {
    */
   getCurrentProvider(): BaseProvider | null {
     // First try to find an authenticated provider
-    for (const registration of this.providers.values()) {
+    for (const [providerId, registration] of this.providers) {
       if (registration.config.authenticated && registration.config.enabled) {
+        // Verify the provider actually has an API key set
+        const hasApiKey = !!(registration.provider as any).apiKey;
+        
+        if (!hasApiKey) {
+          console.warn(`⚠️ Provider ${providerId} is marked as authenticated but has no API key - attempting recovery`);
+          // Run recovery in background without blocking current call
+          this.attemptProviderRecovery(providerId).catch(error => {
+            console.error(`Recovery failed for ${providerId}:`, error);
+          });
+        }
+        
         return registration.provider;
       }
     }
     
     // Fallback to first enabled provider with API key
-    for (const registration of this.providers.values()) {
+    for (const [providerId, registration] of this.providers) {
       if (registration.config.hasApiKey && registration.config.enabled) {
+        // Verify the provider actually has an API key set
+        const hasApiKey = !!(registration.provider as any).apiKey;
+        
+        if (!hasApiKey) {
+          console.warn(`⚠️ Provider ${providerId} claims to have API key but doesn't - attempting recovery`);
+          // Run recovery in background without blocking current call
+          this.attemptProviderRecovery(providerId).catch(error => {
+            console.error(`Recovery failed for ${providerId}:`, error);
+          });
+        }
+        
         return registration.provider;
       }
     }
     
     return null;
+  }
+
+  /**
+   * Attempt to recover provider API key from secure storage
+   */
+  private async attemptProviderRecovery(providerId: string): Promise<void> {
+    try {
+      console.log(`🔄 Attempting recovery for provider: ${providerId}`);
+      
+      const registration = this.providers.get(providerId);
+      if (!registration) {
+        console.error(`❌ Provider ${providerId} not found for recovery`);
+        return;
+      }
+
+      // Try to load API key from secure storage
+      const apiKey = await this.secureStorage.getApiKey(providerId);
+      console.log(`🔐 Recovery attempt - API key found:`, !!apiKey);
+      
+      if (apiKey) {
+        // Set the API key in the provider
+        registration.provider.setApiKey(apiKey);
+        console.log(`✅ Successfully recovered API key for ${providerId}`);
+        
+        // Verify it was set
+        const hasKeyNow = !!(registration.provider as any).apiKey;
+        console.log(`🔍 Verification after recovery - provider has key:`, hasKeyNow);
+      } else {
+        console.error(`❌ No API key found in secure storage for ${providerId}`);
+        
+        // Update configuration to reflect reality
+        registration.config.hasApiKey = false;
+        registration.config.authenticated = false;
+        console.log(`📝 Updated ${providerId} config to reflect missing API key`);
+      }
+    } catch (error) {
+      console.error(`❌ Recovery failed for ${providerId}:`, error);
+    }
   }
 
   /**

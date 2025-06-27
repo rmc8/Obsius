@@ -194,7 +194,26 @@ export class AgentOrchestrator {
     const currentProvider = this.providerManager.getCurrentProvider();
     
     if (!currentProvider) {
-      throw new Error(t('provider.noAuthenticated'));
+      // Provide detailed diagnostics
+      console.error('❌ No current provider available. Diagnostics:');
+      
+      const stats = this.providerManager.getStats();
+      console.error('📊 Provider stats:', stats);
+      
+      const allConfigs = this.providerManager.getAllProviderConfigs();
+      console.error('🔍 All provider configs:', allConfigs);
+      
+      const authenticatedProviders = this.providerManager.getAuthenticatedProviders();
+      console.error('✅ Authenticated providers:', authenticatedProviders);
+      
+      // Try manual recovery for each authenticated provider
+      for (const providerId of authenticatedProviders) {
+        const provider = this.providerManager.getProvider(providerId);
+        const hasKey = !!(provider as any)?.apiKey;
+        console.error(`🔑 Provider ${providerId} has API key:`, hasKey);
+      }
+      
+      throw new Error(t('provider.noAuthenticated') + ` (Total: ${stats.total}, Authenticated: ${stats.authenticated}, HasApiKey: ${stats.hasApiKey})`);
     }
 
     // Prepare conversation context
@@ -241,7 +260,26 @@ export class AgentOrchestrator {
     const currentProvider = this.providerManager.getCurrentProvider();
     
     if (!currentProvider) {
-      throw new Error(t('provider.noAuthenticated'));
+      // Provide detailed diagnostics
+      console.error('❌ No current provider available for streaming. Diagnostics:');
+      
+      const stats = this.providerManager.getStats();
+      console.error('📊 Provider stats:', stats);
+      
+      const allConfigs = this.providerManager.getAllProviderConfigs();
+      console.error('🔍 All provider configs:', allConfigs);
+      
+      const authenticatedProviders = this.providerManager.getAuthenticatedProviders();
+      console.error('✅ Authenticated providers:', authenticatedProviders);
+      
+      // Try manual recovery for each authenticated provider
+      for (const providerId of authenticatedProviders) {
+        const provider = this.providerManager.getProvider(providerId);
+        const hasKey = !!(provider as any)?.apiKey;
+        console.error(`🔑 Provider ${providerId} has API key:`, hasKey);
+      }
+      
+      throw new Error(t('provider.noAuthenticated') + ` (Total: ${stats.total}, Authenticated: ${stats.authenticated}, HasApiKey: ${stats.hasApiKey})`);
     }
 
     // Prepare conversation context
