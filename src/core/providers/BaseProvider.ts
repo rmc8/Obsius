@@ -67,6 +67,26 @@ export interface AIResponse {
 }
 
 /**
+ * Streaming response chunk
+ */
+export interface StreamChunk {
+  content: string;
+  isComplete: boolean;
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  toolCalls?: any[];
+  finishReason?: string;
+}
+
+/**
+ * Streaming response callback
+ */
+export type StreamCallback = (chunk: StreamChunk) => void;
+
+/**
  * HTTP request configuration
  */
 interface RequestConfig {
@@ -113,6 +133,7 @@ export abstract class BaseProvider {
   protected abstract parseModelsResponse(response: any): string[];
   protected abstract formatCompletionRequest(messages: AIMessage[], options: GenerationOptions): any;
   protected abstract parseCompletionResponse(response: any): AIResponse;
+  protected abstract parseStreamChunk(chunk: string): StreamChunk | null;
 
   /**
    * Set API key for authentication
@@ -231,6 +252,44 @@ export abstract class BaseProvider {
   }
 
   /**
+   * Generate streaming AI response using the provider
+   */
+  async generateStreamingResponse(messages: AIMessage[], callback: StreamCallback, options: GenerationOptions = {}): Promise<void> {
+    if (!this.apiKey) {
+      throw new Error('API key not set');
+    }
+
+    try {
+      const requestBody = this.formatCompletionRequest(messages, {
+        maxTokens: 1000,
+        temperature: 0.7,
+        stream: true,
+        ...options
+      });
+
+      await this.makeStreamingRequest({
+        method: 'POST',
+        headers: {
+          ...this.formatAuthHeaders(this.apiKey),
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody),
+        timeout: this.config.timeout
+      }, this.completionEndpoint, callback);
+
+    } catch (error) {
+      console.error(`Failed to generate streaming response from ${this.providerId}:`, error);
+      // Send error as final chunk
+      callback({
+        content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        isComplete: true,
+        finishReason: 'error'
+      });
+      throw error;
+    }
+  }
+
+  /**
    * Make authentication request to provider
    */
   protected async makeAuthRequest(): Promise<ProviderAuthResult> {
@@ -293,6 +352,98 @@ export abstract class BaseProvider {
     }
 
     throw lastError || new Error('Request failed');
+  }
+
+  /**
+   * Make streaming HTTP request for Server-Sent Events
+   */
+  protected async makeStreamingRequest(config: RequestConfig, url: string, callback: StreamCallback): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+        reject(new Error('Streaming request timeout'));
+      }, config.timeout || this.config.timeout);
+
+      fetch(url, {
+        method: config.method,
+        headers: {
+          ...config.headers,
+          'Accept': 'text/event-stream',
+          'Cache-Control': 'no-cache'
+        },
+        body: config.body,
+        signal: controller.signal
+      })
+      .then(async response => {
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          const error = await response.text();
+          reject(new Error(`HTTP ${response.status}: ${error}`));
+          return;
+        }
+
+        if (!response.body) {
+          reject(new Error('No response body for streaming'));
+          return;
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            
+            if (done) {
+              // Send final completion chunk
+              callback({
+                content: '',
+                isComplete: true,
+                finishReason: 'stop'
+              });
+              resolve();
+              break;
+            }
+
+            buffer += decoder.decode(value, { stream: true });
+            
+            // Process complete lines
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || ''; // Keep the incomplete line in buffer
+            
+            for (const line of lines) {
+              if (line.trim() === '') continue;
+              
+              try {
+                const chunk = this.parseStreamChunk(line);
+                if (chunk) {
+                  callback(chunk);
+                  
+                  if (chunk.isComplete) {
+                    resolve();
+                    return;
+                  }
+                }
+              } catch (parseError) {
+                console.warn('Failed to parse stream chunk:', parseError);
+                // Continue processing other chunks
+              }
+            }
+          }
+        } catch (streamError) {
+          reject(streamError);
+        } finally {
+          reader.releaseLock();
+        }
+      })
+      .catch(error => {
+        clearTimeout(timeoutId);
+        reject(error);
+      });
+    });
   }
 
   /**

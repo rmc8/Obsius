@@ -3,7 +3,7 @@
  * Handles authentication and model management for Claude services
  */
 
-import { BaseProvider, ProviderAuthResult, ProviderConfig, AIMessage, GenerationOptions, AIResponse } from './BaseProvider';
+import { BaseProvider, ProviderAuthResult, ProviderConfig, AIMessage, GenerationOptions, AIResponse, StreamChunk } from './BaseProvider';
 
 /**
  * Anthropic API configuration
@@ -310,6 +310,64 @@ export class AnthropicProvider extends BaseProvider {
       throw new Error('No content in response');
     } catch (error) {
       throw new Error(`Failed to parse Anthropic response: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Parse streaming response chunk from Anthropic
+   */
+  protected parseStreamChunk(chunk: string): StreamChunk | null {
+    try {
+      // Anthropic streaming format: "event: message_delta\ndata: {json}\n"
+      const lines = chunk.split('\n');
+      let eventType = '';
+      let data = '';
+
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          eventType = line.slice(7).trim();
+        } else if (line.startsWith('data: ')) {
+          data = line.slice(6).trim();
+        }
+      }
+
+      if (!data) return null;
+
+      const parsedData = JSON.parse(data);
+
+      // Handle different event types
+      if (eventType === 'content_block_delta' && parsedData.delta) {
+        return {
+          content: parsedData.delta.text || '',
+          isComplete: false
+        };
+      }
+
+      if (eventType === 'message_stop' || eventType === 'content_block_stop') {
+        return {
+          content: '',
+          isComplete: true,
+          finishReason: 'stop'
+        };
+      }
+
+      // Handle usage information (usually in message_delta)
+      if (eventType === 'message_delta' && parsedData.usage) {
+        return {
+          content: '',
+          isComplete: false,
+          usage: {
+            promptTokens: parsedData.usage.input_tokens || 0,
+            completionTokens: parsedData.usage.output_tokens || 0,
+            totalTokens: (parsedData.usage.input_tokens || 0) + (parsedData.usage.output_tokens || 0)
+          }
+        };
+      }
+
+      return null;
+    } catch (error) {
+      console.warn('Failed to parse Anthropic stream chunk:', error);
+      return null;
     }
   }
 

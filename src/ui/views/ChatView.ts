@@ -7,6 +7,7 @@ import { ItemView, WorkspaceLeaf } from 'obsidian';
 import ObsiusPlugin from '../../../main';
 import { t, initializeI18n, formatDate, getCommandDescriptions } from '../../utils/i18n';
 import { AgentOrchestrator, ConversationContext } from '../../core/AgentOrchestrator';
+import { AssistantResponse } from '../../utils/types';
 
 export const VIEW_TYPE_OBSIUS_CHAT = 'obsius-chat-view';
 
@@ -301,9 +302,6 @@ export class ChatView extends ItemView {
     
     this.isProcessing = true;
     
-    // Show thinking indicator
-    const thinkingLine = this.addOutput(t('cli.thinking'), 'info');
-    
     try {
       // Build conversation context
       const context: ConversationContext = {
@@ -313,68 +311,118 @@ export class ChatView extends ItemView {
         userId: 'user'
       };
 
-      // Process message with AI
-      const response = await this.agentOrchestrator.processMessage(message, context);
+      // Check if streaming is enabled (default to true)
+      const enableStreaming = this.plugin.settings.ui?.enableStreaming !== false;
       
-      // Remove thinking indicator
-      if (thinkingLine.parentNode) {
-        thinkingLine.parentNode.removeChild(thinkingLine);
-      }
-      
-      // Display AI response
-      this.addOutput(response.message.content);
-      
-      // Display action results if any
-      if (response.actions && response.actions.length > 0) {
-        this.addOutput(''); // Empty line for spacing
-        
-        for (const action of response.actions) {
-          if (action.result?.success) {
-            this.addOutput(`✅ ${action.description}: ${action.result.message}`, 'success');
-            
-            // Show additional details if available
-            if (action.result.data) {
-              const data = action.result.data;
-              if (data.path) {
-                this.addOutput(`   📄 ${data.path}`, 'info');
-              }
-              if (data.title) {
-                this.addOutput(`   📝 ${data.title}`, 'info');
-              }
-            }
-          } else {
-            this.addOutput(`❌ ${action.description}: ${action.result?.message || 'Failed'}`, 'error');
-          }
-        }
-      }
-      
-      // Show files created/modified summary
-      if (response.filesCreated && response.filesCreated.length > 0) {
-        this.addOutput(''); // Empty line
-        this.addOutput(`📄 Created ${response.filesCreated.length} file(s):`, 'success');
-        response.filesCreated.forEach(file => {
-          this.addOutput(`   • ${file}`, 'info');
-        });
-      }
-      
-      if (response.filesModified && response.filesModified.length > 0) {
-        this.addOutput(''); // Empty line
-        this.addOutput(`📝 Modified ${response.filesModified.length} file(s):`, 'success');
-        response.filesModified.forEach(file => {
-          this.addOutput(`   • ${file}`, 'info');
-        });
+      if (enableStreaming) {
+        await this.sendStreamingChatMessage(message, context);
+      } else {
+        await this.sendNonStreamingChatMessage(message, context);
       }
       
     } catch (error) {
-      // Remove thinking indicator
-      if (thinkingLine.parentNode) {
-        thinkingLine.parentNode.removeChild(thinkingLine);
-      }
-      
       console.error('Chat error:', error);
       this.addOutput(`${t('general.error')}: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
     } finally {
       this.isProcessing = false;
+    }
+  }
+
+  /**
+   * Send chat message with streaming response
+   */
+  private async sendStreamingChatMessage(message: string, context: ConversationContext): Promise<void> {
+    // Create streaming output line
+    const streamingLine = this.addOutput('', 'normal');
+    let accumulatedContent = '';
+    
+    // Process message with streaming AI
+    const response = await this.agentOrchestrator!.processMessageStreaming(
+      message, 
+      context,
+      (chunk) => {
+        if (chunk.content) {
+          accumulatedContent += chunk.content;
+          streamingLine.textContent = accumulatedContent;
+          
+          // Auto-scroll to keep the streaming content visible
+          this.scrollToBottom();
+        }
+        
+        if (chunk.isComplete) {
+          // Streaming is complete
+          console.log('Streaming complete');
+        }
+      }
+    );
+    
+    this.displayActionResults(response);
+  }
+
+  /**
+   * Send chat message without streaming (fallback)
+   */
+  private async sendNonStreamingChatMessage(message: string, context: ConversationContext): Promise<void> {
+    // Show thinking indicator
+    const thinkingLine = this.addOutput(t('cli.thinking'), 'info');
+    
+    // Process message with AI
+    const response = await this.agentOrchestrator!.processMessage(message, context);
+    
+    // Remove thinking indicator
+    if (thinkingLine.parentNode) {
+      thinkingLine.parentNode.removeChild(thinkingLine);
+    }
+    
+    // Display AI response
+    this.addOutput(response.message.content);
+    
+    this.displayActionResults(response);
+  }
+
+  /**
+   * Display action results and file summaries
+   */
+  private displayActionResults(response: AssistantResponse): void {
+    // Display action results if any
+    if (response.actions && response.actions.length > 0) {
+      this.addOutput(''); // Empty line for spacing
+      
+      for (const action of response.actions) {
+        if (action.result?.success) {
+          this.addOutput(`✅ ${action.description}: ${action.result.message}`, 'success');
+          
+          // Show additional details if available
+          if (action.result.data) {
+            const data = action.result.data;
+            if (data.path) {
+              this.addOutput(`   📄 ${data.path}`, 'info');
+            }
+            if (data.title) {
+              this.addOutput(`   📝 ${data.title}`, 'info');
+            }
+          }
+        } else {
+          this.addOutput(`❌ ${action.description}: ${action.result?.message || 'Failed'}`, 'error');
+        }
+      }
+    }
+    
+    // Show files created/modified summary
+    if (response.filesCreated && response.filesCreated.length > 0) {
+      this.addOutput(''); // Empty line
+      this.addOutput(`📄 Created ${response.filesCreated.length} file(s):`, 'success');
+      response.filesCreated.forEach((file: string) => {
+        this.addOutput(`   • ${file}`, 'info');
+      });
+    }
+    
+    if (response.filesModified && response.filesModified.length > 0) {
+      this.addOutput(''); // Empty line
+      this.addOutput(`📝 Modified ${response.filesModified.length} file(s):`, 'success');
+      response.filesModified.forEach((file: string) => {
+        this.addOutput(`   • ${file}`, 'info');
+      });
     }
   }
 

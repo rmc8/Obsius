@@ -3,7 +3,7 @@
  * Handles authentication and model management for OpenAI services
  */
 
-import { BaseProvider, ProviderAuthResult, ProviderConfig, AIMessage, GenerationOptions, AIResponse } from './BaseProvider';
+import { BaseProvider, ProviderAuthResult, ProviderConfig, AIMessage, GenerationOptions, AIResponse, StreamChunk } from './BaseProvider';
 
 /**
  * OpenAI API configuration
@@ -350,6 +350,70 @@ export class OpenAIProvider extends BaseProvider {
       throw new Error('No choices in response');
     } catch (error) {
       throw new Error(`Failed to parse OpenAI response: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Parse streaming response chunk from OpenAI
+   */
+  protected parseStreamChunk(chunk: string): StreamChunk | null {
+    try {
+      // OpenAI streaming format: "data: {json}\n"
+      if (!chunk.startsWith('data: ')) {
+        return null;
+      }
+
+      const dataStr = chunk.slice(6).trim();
+      
+      // Handle end of stream
+      if (dataStr === '[DONE]') {
+        return {
+          content: '',
+          isComplete: true,
+          finishReason: 'stop'
+        };
+      }
+
+      const data = JSON.parse(dataStr);
+      
+      if (data.choices && data.choices.length > 0) {
+        const choice = data.choices[0];
+        const delta = choice.delta;
+        
+        let content = '';
+        if (delta.content) {
+          content = delta.content;
+        }
+
+        const isComplete = choice.finish_reason !== null;
+        
+        const streamChunk: StreamChunk = {
+          content,
+          isComplete,
+          finishReason: choice.finish_reason
+        };
+
+        // Add usage information if available (usually in last chunk)
+        if (data.usage) {
+          streamChunk.usage = {
+            promptTokens: data.usage.prompt_tokens,
+            completionTokens: data.usage.completion_tokens,
+            totalTokens: data.usage.total_tokens
+          };
+        }
+
+        // Add tool calls if present
+        if (delta.tool_calls && delta.tool_calls.length > 0) {
+          streamChunk.toolCalls = delta.tool_calls;
+        }
+
+        return streamChunk;
+      }
+
+      return null;
+    } catch (error) {
+      console.warn('Failed to parse OpenAI stream chunk:', error);
+      return null;
     }
   }
 

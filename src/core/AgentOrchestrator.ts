@@ -13,7 +13,7 @@ import {
   ExecutionContext,
   ToolResult 
 } from '../utils/types';
-import { AIMessage } from './providers/BaseProvider';
+import { AIMessage, StreamCallback, StreamChunk } from './providers/BaseProvider';
 import { t, getCurrentLanguage } from '../utils/i18n';
 
 export interface AgentConfig {
@@ -103,12 +103,78 @@ export class AgentOrchestrator {
     } catch (error) {
       console.error('Agent orchestrator error:', error);
       
-      const errorMessage: ChatMessage = {
+      const errorMessage = this.createErrorMessage(error);
+
+      return {
+        message: errorMessage,
+        actions: []
+      };
+    }
+  }
+
+  /**
+   * Process user message with streaming AI response
+   */
+  async processMessageStreaming(
+    userInput: string,
+    context: ConversationContext,
+    streamCallback: StreamCallback,
+    config: AgentConfig = {}
+  ): Promise<AssistantResponse> {
+    try {
+      // Add user message to conversation
+      const userMessage: ChatMessage = {
+        id: this.generateMessageId(),
+        timestamp: new Date(),
+        type: 'user',
+        content: userInput
+      };
+
+      this.conversationHistory.push(userMessage);
+      context.messages = [...this.conversationHistory];
+
+      // Get streaming AI response
+      const aiResponse = await this.generateStreamingAIResponse(userInput, context, streamCallback, config);
+      
+      // Add assistant message to conversation
+      const assistantMessage: ChatMessage = {
         id: this.generateMessageId(),
         timestamp: new Date(),
         type: 'assistant',
-        content: `${t('general.error')}: ${error instanceof Error ? error.message : 'Unknown error'}`
+        content: aiResponse.content,
+        actions: aiResponse.actions
       };
+
+      this.conversationHistory.push(assistantMessage);
+
+      // Execute any tool calls
+      const executedActions: ObsidianAction[] = [];
+      if (aiResponse.actions && aiResponse.actions.length > 0) {
+        for (const action of aiResponse.actions) {
+          const result = await this.executeAction(action, context);
+          action.result = result;
+          executedActions.push(action);
+        }
+      }
+
+      return {
+        message: assistantMessage,
+        actions: executedActions,
+        filesCreated: this.extractCreatedFiles(executedActions),
+        filesModified: this.extractModifiedFiles(executedActions)
+      };
+
+    } catch (error) {
+      console.error('Agent orchestrator streaming error:', error);
+      
+      const errorMessage = this.createErrorMessage(error);
+      
+      // Send error through stream callback
+      streamCallback({
+        content: errorMessage.content,
+        isComplete: true,
+        finishReason: 'error'
+      });
 
       return {
         message: errorMessage,
@@ -164,6 +230,78 @@ export class AgentOrchestrator {
   }
 
   /**
+   * Generate streaming AI response using the current provider
+   */
+  private async generateStreamingAIResponse(
+    userInput: string,
+    context: ConversationContext,
+    streamCallback: StreamCallback,
+    config: AgentConfig
+  ): Promise<{ content: string; actions?: ObsidianAction[] }> {
+    const currentProvider = this.providerManager.getCurrentProvider();
+    
+    if (!currentProvider) {
+      throw new Error(t('provider.noAuthenticated'));
+    }
+
+    // Prepare conversation context
+    const messages: AIMessage[] = context.messages.map(msg => ({
+      role: msg.type === 'user' ? 'user' as const : msg.type === 'assistant' ? 'assistant' as const : 'system' as const,
+      content: msg.content
+    }));
+
+    // Add system prompt with available tools
+    const systemPrompt = this.buildSystemPrompt(context);
+    messages.unshift({ role: 'system', content: systemPrompt });
+
+    // Get available tools for the AI
+    const availableTools = this.getAvailableToolDefinitions();
+
+    // Accumulate response content
+    let fullContent = '';
+    let finalUsage: any = undefined;
+    let finalToolCalls: any[] = [];
+
+    // Create wrapper callback to accumulate content
+    const wrapperCallback: StreamCallback = (chunk: StreamChunk) => {
+      if (chunk.content) {
+        fullContent += chunk.content;
+      }
+      
+      if (chunk.usage) {
+        finalUsage = chunk.usage;
+      }
+      
+      if (chunk.toolCalls) {
+        finalToolCalls.push(...chunk.toolCalls);
+      }
+      
+      // Forward to original callback
+      streamCallback(chunk);
+    };
+
+    // Generate streaming response
+    await currentProvider.generateStreamingResponse(
+      messages,
+      wrapperCallback,
+      {
+        maxTokens: config.maxTokens || 1000,
+        temperature: config.temperature || 0.7,
+        tools: availableTools,
+        stream: true
+      }
+    );
+
+    // Parse tool calls from accumulated response
+    const actions = this.parseToolCalls(fullContent, finalToolCalls);
+
+    return {
+      content: fullContent,
+      actions
+    };
+  }
+
+  /**
    * Build Obsidian-optimized system prompt for knowledge management
    */
   private buildSystemPrompt(context: ConversationContext): string {
@@ -173,75 +311,87 @@ export class AgentOrchestrator {
     const enabledToolsCount = this.toolRegistry.getEnabledTools().length;
     const currentLanguage = this.getCurrentLanguage();
 
-    return `You are Obsius, an intelligent knowledge management agent specializing in Obsidian operations. Your primary goal is to help users build, organize, and navigate their personal knowledge effectively while maintaining the integrity and interconnectedness of their knowledge graph.
+    return `I am Obsius, an AI agent specializing in knowledge management within Obsidian. My mission is to help you build, organize, and navigate your personal knowledge effectively while maintaining the integrity and interconnectedness of your knowledge graph. I am dedicated to deepening your learning and thinking through thoughtful organization and meaningful connections.
 
-You are not just a note-taking assistant, but a thinking partner that understands the principles of Personal Knowledge Management (PKM) and helps users develop their ideas through thoughtful organization and connection-making.
+I am not just a note-taking assistant, but your thinking partner who deeply understands the principles of Personal Knowledge Management (PKM). I take pride in helping you develop ideas through structured organization and strategic connection-making that enhances your intellectual growth.
+
+As your dedicated Obsidian specialist, I hold these core values and responsibilities:
 
 ## Knowledge Management Principles
 
-**🔍 Context First Principle:**
-- ALWAYS search existing knowledge before creating new content
-- Understand the current state of the user's knowledge graph
-- Identify gaps and opportunities for connection
-- Respect the user's existing organizational patterns
+**🔍 Context First Principle - My Foundation:**
+I ALWAYS search existing knowledge before creating new content. I understand that every piece of information exists within a web of relationships, and I take responsibility for:
+- Understanding the current state of your knowledge graph
+- Identifying gaps and opportunities for meaningful connections
+- Respecting and building upon your existing organizational patterns
+- Never creating content in isolation from your established knowledge base
 
-**🔗 Connection Excellence:**
-- Create meaningful bi-directional links between related concepts
-- Suggest relevant tags based on content and existing taxonomy
-- Identify opportunities for concept hierarchies and MOCs (Maps of Content)
+**🔗 Connection Excellence - My Specialty:**
+I excel at creating meaningful bi-directional links between related concepts. As your knowledge architect, I:
+- Suggest relevant tags based on content and your existing taxonomy
+- Identify opportunities for concept hierarchies and Maps of Content (MOCs)
 - Maintain link integrity and prevent orphaned notes
+- Design connections that enhance both local and global knowledge navigation
 
-**🚫 Duplication Avoidance:**
-- Detect similar existing content before creating new notes
-- Suggest consolidation when appropriate
-- Enhance existing notes rather than creating redundant ones
-- Provide clear differentiation when similar topics require separate treatment
+**🚫 Duplication Avoidance - My Commitment:**
+I am vigilant about detecting similar existing content before creating new notes. My approach includes:
+- Proactively suggesting consolidation when appropriate
+- Enhancing existing notes rather than creating redundant ones
+- Providing clear differentiation when similar topics require separate treatment
+- Maintaining the unique value of each piece in your knowledge ecosystem
 
-**🏗️ Structure Preservation:**
-- Maintain consistency with user's folder structure and naming conventions
-- Respect established tagging patterns and hierarchies
-- Preserve the user's personal knowledge organization philosophy
-- Adapt to the user's preferred note formats and templates
+**🏗️ Structure Preservation - My Respect:**
+I deeply respect your personal knowledge organization philosophy and:
+- Maintain consistency with your folder structure and naming conventions
+- Honor established tagging patterns and hierarchies
+- Adapt to your preferred note formats and templates
+- Preserve the intellectual architecture you've carefully built
 
-**🎯 Discoverability Enhancement:**
-- Use descriptive, searchable titles that reflect content essence
-- Apply relevant tags that enhance findability
-- Create appropriate metadata for future reference
-- Consider the note's place in the broader knowledge ecosystem
+**🎯 Discoverability Enhancement - My Promise:**
+I ensure your knowledge remains findable and useful over time by:
+- Using descriptive, searchable titles that reflect content essence
+- Applying relevant tags that enhance long-term findability
+- Creating appropriate metadata for future reference and discovery
+- Considering each note's strategic place in your broader knowledge ecosystem
 
 ## Knowledge Workflow
 
-Follow this 5-phase approach for all knowledge management tasks:
+My systematic approach follows this 5-phase methodology for all knowledge management tasks:
 
-**1. 🔍 Explore Phase**
-- Search for related concepts, terms, and topics
-- Analyze existing note structures and patterns
+**1. 🔍 Explore Phase - I Investigate:**
+As my first responsibility, I thoroughly explore your existing knowledge:
+- Search for related concepts, terms, and topics across your vault
+- Analyze existing note structures and organizational patterns
 - Identify knowledge gaps and connection opportunities
-- Assess the current organization schema
+- Assess your current organization schema to understand your thinking patterns
 
-**2. 🔗 Connect Phase**
-- Map relationships to existing notes and concepts
-- Identify potential link targets and sources
-- Determine appropriate tag associations
-- Consider hierarchical relationships (parent/child concepts)
+**2. 🔗 Connect Phase - I Map Relationships:**
+With deep understanding of your knowledge landscape, I:
+- Map relationships to existing notes and concepts in your vault
+- Identify potential link targets and sources for meaningful connections
+- Determine appropriate tag associations based on your established taxonomy
+- Consider hierarchical relationships and parent/child concept structures
 
-**3. 🏗️ Structure Phase**
-- Choose appropriate folder placement based on existing patterns
-- Design note structure that serves the content purpose
-- Plan metadata and frontmatter requirements
-- Consider template usage for consistency
+**3. 🏗️ Structure Phase - I Design Thoughtfully:**
+I carefully plan the optimal organization approach:
+- Choose appropriate folder placement based on your existing patterns
+- Design note structure that serves both immediate and long-term purposes
+- Plan metadata and frontmatter requirements for maximum utility
+- Consider template usage for consistency with your established formats
 
-**4. ✏️ Create/Update Phase**
-- Create well-structured, scannable content
-- Implement planned linking strategy
-- Apply appropriate tags and metadata
-- Ensure content quality and clarity
+**4. ✏️ Create/Update Phase - I Execute with Care:**
+I implement the planned approach with attention to quality:
+- Create well-structured, scannable content that serves your learning style
+- Implement the planned linking strategy for maximum knowledge connectivity
+- Apply appropriate tags and metadata for discoverability
+- Ensure content quality, clarity, and alignment with your intellectual goals
 
-**5. 🌐 Integrate Phase**
-- Verify all planned links are functional
-- Update related notes with back-references if beneficial
-- Ensure tag consistency across the vault
-- Consider impact on graph structure and navigation
+**5. 🌐 Integrate Phase - I Ensure Coherence:**
+I complete the process by ensuring seamless integration:
+- Verify all planned links are functional and add semantic value
+- Update related notes with back-references when beneficial for navigation
+- Ensure tag consistency across your vault for reliable filtering
+- Consider the broader impact on your knowledge graph structure and navigation flow
 
 ## Current Environment
 
@@ -504,5 +654,160 @@ Remember: Your goal is to be a thoughtful knowledge management partner. Help use
    */
   setHistory(messages: ChatMessage[]): void {
     this.conversationHistory = [...messages];
+  }
+
+  /**
+   * Create user-friendly error message with appropriate guidance
+   */
+  private createErrorMessage(error: unknown): ChatMessage {
+    let content: string;
+    let errorType: string = 'UNKNOWN_ERROR';
+
+    if (error instanceof Error) {
+      const errorMessage = error.message.toLowerCase();
+      
+      // Categorize different types of errors
+      if (errorMessage.includes('api key') || errorMessage.includes('unauthorized') || errorMessage.includes('invalid key')) {
+        errorType = 'AUTH_ERROR';
+        content = t('errors.authentication.invalid');
+      } else if (errorMessage.includes('rate limit') || errorMessage.includes('quota') || errorMessage.includes('usage limit')) {
+        errorType = 'RATE_LIMIT_ERROR';
+        content = t('errors.rateLimit.exceeded');
+      } else if (errorMessage.includes('network') || errorMessage.includes('timeout') || errorMessage.includes('connection')) {
+        errorType = 'NETWORK_ERROR';
+        content = t('errors.network.connection');
+      } else if (errorMessage.includes('model') || errorMessage.includes('not available')) {
+        errorType = 'MODEL_ERROR';
+        content = t('errors.model.unavailable');
+      } else if (errorMessage.includes('provider') || errorMessage.includes('noAuthenticated')) {
+        errorType = 'PROVIDER_ERROR';
+        content = t('errors.provider.notConfigured');
+      } else {
+        content = `${t('general.error')}: ${error.message}`;
+      }
+    } else {
+      content = t('errors.unknown.general');
+    }
+
+    console.error(`AgentOrchestrator Error [${errorType}]:`, error);
+
+    return {
+      id: this.generateMessageId(),
+      timestamp: new Date(),
+      type: 'assistant',
+      content
+    };
+  }
+
+  /**
+   * Handle tool execution errors with detailed feedback
+   */
+  private handleToolExecutionError(toolName: string, error: unknown): ToolResult {
+    let message: string;
+    let errorCode: string = 'TOOL_EXECUTION_ERROR';
+
+    if (error instanceof Error) {
+      const errorMessage = error.message.toLowerCase();
+      
+      if (errorMessage.includes('permission') || errorMessage.includes('access denied')) {
+        errorCode = 'PERMISSION_ERROR';
+        message = t('errors.tool.permission', { tool: toolName });
+      } else if (errorMessage.includes('file not found') || errorMessage.includes('path')) {
+        errorCode = 'FILE_ERROR';
+        message = t('errors.tool.fileAccess', { tool: toolName });
+      } else if (errorMessage.includes('validation') || errorMessage.includes('parameter')) {
+        errorCode = 'VALIDATION_ERROR';
+        message = t('errors.tool.validation', { tool: toolName });
+      } else {
+        message = t('errors.tool.execution', { tool: toolName, error: error.message });
+      }
+    } else {
+      message = t('errors.tool.unknown', { tool: toolName });
+    }
+
+    console.error(`Tool Execution Error [${errorCode}] in ${toolName}:`, error);
+
+    return {
+      success: false,
+      message,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
+  }
+
+  /**
+   * Enhanced action execution with better error handling
+   */
+  private async executeActionWithErrorHandling(
+    action: ObsidianAction,
+    context: ConversationContext
+  ): Promise<ToolResult> {
+    try {
+      const executionContext: ExecutionContext = {
+        app: this.app,
+        currentFile: context.currentFile ? this.app.vault.getAbstractFileByPath(context.currentFile) as any : undefined,
+        vaultPath: (this.app.vault.adapter as any).path || '',
+        workspaceState: context.workspaceState
+      };
+
+      // Add timeout and retry logic for tool execution
+      return await this.executeToolWithRetry(action, executionContext);
+
+    } catch (error) {
+      return this.handleToolExecutionError(action.type, error);
+    }
+  }
+
+  /**
+   * Execute tool with retry logic for transient failures
+   */
+  private async executeToolWithRetry(
+    action: ObsidianAction,
+    executionContext: ExecutionContext,
+    maxRetries: number = 2
+  ): Promise<ToolResult> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const result = await this.toolRegistry.executeTool(
+          action.type,
+          action.parameters,
+          {
+            context: executionContext,
+            timeout: 10000 // 10 second timeout
+          }
+        );
+
+        if (result.success) {
+          return result;
+        } else if (attempt === maxRetries) {
+          // Last attempt failed, return the result
+          return result;
+        }
+        
+        // Wait before retry (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('Unknown error');
+        
+        // Don't retry on certain types of errors
+        if (error instanceof Error) {
+          const errorMessage = error.message.toLowerCase();
+          if (errorMessage.includes('permission') || errorMessage.includes('validation')) {
+            throw error; // Don't retry permission or validation errors
+          }
+        }
+
+        if (attempt === maxRetries) {
+          throw lastError;
+        }
+
+        // Wait before retry
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+      }
+    }
+
+    throw lastError || new Error('Tool execution failed after retries');
   }
 }

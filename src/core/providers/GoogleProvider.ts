@@ -3,7 +3,7 @@
  * Handles authentication and model management for Google AI services
  */
 
-import { BaseProvider, ProviderAuthResult, ProviderConfig, AIMessage, GenerationOptions, AIResponse } from './BaseProvider';
+import { BaseProvider, ProviderAuthResult, ProviderConfig, AIMessage, GenerationOptions, AIResponse, StreamChunk } from './BaseProvider';
 
 /**
  * Google AI API configuration
@@ -366,6 +366,55 @@ export class GoogleProvider extends BaseProvider {
       throw new Error('No candidates in response');
     } catch (error) {
       throw new Error(`Failed to parse Google AI response: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Parse streaming response chunk from Google AI
+   */
+  protected parseStreamChunk(chunk: string): StreamChunk | null {
+    try {
+      // Google AI streaming format: JSON objects separated by newlines
+      if (!chunk.trim()) return null;
+
+      const data = JSON.parse(chunk);
+
+      if (data.candidates && data.candidates.length > 0) {
+        const candidate = data.candidates[0];
+        const content = candidate.content;
+
+        let textContent = '';
+        if (content && content.parts) {
+          textContent = content.parts
+            .filter((part: any) => part.text)
+            .map((part: any) => part.text)
+            .join('');
+        }
+
+        const isComplete = candidate.finishReason !== null && candidate.finishReason !== undefined;
+
+        const streamChunk: StreamChunk = {
+          content: textContent,
+          isComplete,
+          finishReason: candidate.finishReason
+        };
+
+        // Add usage information if available
+        if (data.usageMetadata) {
+          streamChunk.usage = {
+            promptTokens: data.usageMetadata.promptTokenCount || 0,
+            completionTokens: data.usageMetadata.candidatesTokenCount || 0,
+            totalTokens: data.usageMetadata.totalTokenCount || 0
+          };
+        }
+
+        return streamChunk;
+      }
+
+      return null;
+    } catch (error) {
+      console.warn('Failed to parse Google AI stream chunk:', error);
+      return null;
     }
   }
 

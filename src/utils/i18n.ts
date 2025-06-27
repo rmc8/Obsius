@@ -65,6 +65,34 @@ const en: TranslationKeys = {
     checkStatus: 'Use /provider to check provider status or /settings to configure',
     configure: 'Configure API key in settings'
   },
+
+  errors: {
+    authentication: {
+      invalid: 'Authentication failed. Please check your API key in settings.'
+    },
+    rateLimit: {
+      exceeded: 'Rate limit exceeded. Please wait a moment and try again.'
+    },
+    network: {
+      connection: 'Network connection error. Please check your internet connection.'
+    },
+    model: {
+      unavailable: 'The selected AI model is currently unavailable. Try a different model.'
+    },
+    provider: {
+      notConfigured: 'AI provider not configured. Please set up authentication in settings.'
+    },
+    unknown: {
+      general: 'An unexpected error occurred. Please try again.'
+    },
+    tool: {
+      permission: 'Permission denied for tool: {tool}',
+      fileAccess: 'File access error in tool: {tool}',
+      validation: 'Invalid parameters for tool: {tool}',
+      execution: 'Tool {tool} failed: {error}',
+      unknown: 'Unknown error in tool: {tool}'
+    }
+  },
   
   tools: {
     aiIntegration: 'AI integration is still being implemented. This is a placeholder response.',
@@ -150,6 +178,34 @@ const ja: TranslationKeys = {
     noAuthenticated: 'エラー: 認証済みのAIプロバイダがありません',
     checkStatus: '/provider でプロバイダステータスを確認するか、/settings で設定してください',
     configure: '設定でAPIキーを設定してください'
+  },
+
+  errors: {
+    authentication: {
+      invalid: '認証に失敗しました。設定でAPIキーを確認してください。'
+    },
+    rateLimit: {
+      exceeded: 'レート制限に達しました。しばらく待ってから再試行してください。'
+    },
+    network: {
+      connection: 'ネットワーク接続エラーです。インターネット接続を確認してください。'
+    },
+    model: {
+      unavailable: '選択されたAIモデルは現在利用できません。別のモデルをお試しください。'
+    },
+    provider: {
+      notConfigured: 'AIプロバイダが設定されていません。設定で認証を行ってください。'
+    },
+    unknown: {
+      general: '予期しないエラーが発生しました。再試行してください。'
+    },
+    tool: {
+      permission: 'ツール {tool} の実行権限がありません',
+      fileAccess: 'ツール {tool} でファイルアクセスエラーが発生しました',
+      validation: 'ツール {tool} のパラメータが無効です',
+      execution: 'ツール {tool} の実行に失敗しました: {error}',
+      unknown: 'ツール {tool} で不明なエラーが発生しました'
+    }
   },
   
   tools: {
