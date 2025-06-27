@@ -12,6 +12,7 @@ Obsius is an AI-powered plugin for Obsidian that provides a CLI-style agent inte
 - **🔀 Multi-Provider Support**: OpenAI, Anthropic Claude, and Google Gemini integration
 - **🔐 Secure API Management**: Encrypted API key storage with authentication status
 - **⌨️ Rich Keyboard Support**: Command history, tab completion, familiar CLI navigation
+- **🌐 Multilingual Support**: Full interface localization in English and Japanese (日本語)
 - **🎨 Theme Integration**: Seamless light/dark mode compatibility with Obsidian
 
 ### 🔄 In Development
@@ -64,7 +65,8 @@ Obsius aims to provide the **efficiency of ClaudeCode with the knowledge managem
 
 1. **Open Obsius**: Click the robot icon in the ribbon or use `Ctrl+P` → "Obsius: Open AI Chat"
 2. **Configure Provider**: Go to Settings → Obsius and add your API key (Claude, OpenAI, or Gemini)
-3. **Try CLI Commands**: Start with built-in commands:
+3. **Set Language (Optional)**: Choose English (default) or Japanese (日本語) in Interface Settings
+4. **Try CLI Commands**: Start with built-in commands:
    - `/help` - Show available commands
    - `/status` - Check system status
    - `/provider` - View provider information
