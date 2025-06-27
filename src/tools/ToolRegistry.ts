@@ -195,6 +195,24 @@ export class ToolRegistry {
   }
 
   /**
+   * Get enabled tool instances
+   */
+  getEnabledTools(): BaseTool[] {
+    const enabledTools: BaseTool[] = [];
+    
+    for (const [name, metadata] of this.tools.entries()) {
+      if (metadata.enabled) {
+        const tool = this.getTool(name);
+        if (tool) {
+          enabledTools.push(tool);
+        }
+      }
+    }
+    
+    return enabledTools;
+  }
+
+  /**
    * Get tools by category
    */
   getToolsByCategory(category: string): string[] {

@@ -35,6 +35,38 @@ export interface ProviderConfig {
 }
 
 /**
+ * AI message format
+ */
+export interface AIMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+/**
+ * Generation options
+ */
+export interface GenerationOptions {
+  maxTokens?: number;
+  temperature?: number;
+  stream?: boolean;
+  tools?: any[];
+}
+
+/**
+ * AI response format
+ */
+export interface AIResponse {
+  content: string;
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  toolCalls?: any[];
+  finishReason?: string;
+}
+
+/**
  * HTTP request configuration
  */
 interface RequestConfig {
@@ -74,10 +106,13 @@ export abstract class BaseProvider {
   abstract get displayName(): string;
   abstract get authEndpoint(): string;
   abstract get modelsEndpoint(): string;
+  abstract get completionEndpoint(): string;
   
   protected abstract formatAuthHeaders(apiKey: string): Record<string, string>;
   protected abstract parseAuthResponse(response: any): ProviderAuthResult;
   protected abstract parseModelsResponse(response: any): string[];
+  protected abstract formatCompletionRequest(messages: AIMessage[], options: GenerationOptions): any;
+  protected abstract parseCompletionResponse(response: any): AIResponse;
 
   /**
    * Set API key for authentication
@@ -154,6 +189,43 @@ export abstract class BaseProvider {
       return this.parseModelsResponse(response.data);
     } catch (error) {
       console.error(`Failed to fetch models from ${this.providerId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate AI response using the provider
+   */
+  async generateResponse(messages: AIMessage[], options: GenerationOptions = {}): Promise<AIResponse> {
+    if (!this.apiKey) {
+      throw new Error('API key not set');
+    }
+
+    try {
+      const requestBody = this.formatCompletionRequest(messages, {
+        maxTokens: 1000,
+        temperature: 0.7,
+        ...options
+      });
+
+      const response = await this.makeHttpRequest({
+        method: 'POST',
+        headers: {
+          ...this.formatAuthHeaders(this.apiKey),
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody),
+        timeout: this.config.timeout
+      }, this.completionEndpoint);
+
+      if (!response.ok) {
+        const errorMsg = this.extractErrorMessage(response.data);
+        throw new Error(`HTTP ${response.status}: ${errorMsg}`);
+      }
+
+      return this.parseCompletionResponse(response.data);
+    } catch (error) {
+      console.error(`Failed to generate response from ${this.providerId}:`, error);
       throw error;
     }
   }

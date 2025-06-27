@@ -3,7 +3,7 @@
  * Handles authentication and model management for Claude services
  */
 
-import { BaseProvider, ProviderAuthResult, ProviderConfig } from './BaseProvider';
+import { BaseProvider, ProviderAuthResult, ProviderConfig, AIMessage, GenerationOptions, AIResponse } from './BaseProvider';
 
 /**
  * Anthropic API configuration
@@ -55,6 +55,10 @@ export class AnthropicProvider extends BaseProvider {
 
   get modelsEndpoint(): string {
     // Anthropic doesn't have a models endpoint, we'll return known models
+    return `${this.config.baseUrl}/v1/messages`;
+  }
+
+  get completionEndpoint(): string {
     return `${this.config.baseUrl}/v1/messages`;
   }
 
@@ -222,6 +226,90 @@ export class AnthropicProvider extends BaseProvider {
         error: error instanceof Error ? error.message : 'Unknown error',
         errorCode: 'NETWORK_ERROR'
       };
+    }
+  }
+
+  /**
+   * Format completion request for Anthropic API
+   */
+  protected formatCompletionRequest(messages: AIMessage[], options: GenerationOptions): any {
+    // Convert system messages to system parameter
+    const systemMessage = messages.find(msg => msg.role === 'system');
+    const conversationMessages = messages.filter(msg => msg.role !== 'system');
+
+    const request: any = {
+      model: this.config.defaultModel,
+      max_tokens: options.maxTokens || 1000,
+      messages: conversationMessages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }))
+    };
+
+    // Add system prompt if present
+    if (systemMessage) {
+      request.system = systemMessage.content;
+    }
+
+    // Add temperature if specified
+    if (options.temperature !== undefined) {
+      request.temperature = options.temperature;
+    }
+
+    // Add tools if provided (Anthropic format)
+    if (options.tools && options.tools.length > 0) {
+      request.tools = options.tools.map((tool: any) => ({
+        name: tool.function.name,
+        description: tool.function.description,
+        input_schema: tool.function.parameters
+      }));
+    }
+
+    return request;
+  }
+
+  /**
+   * Parse completion response from Anthropic
+   */
+  protected parseCompletionResponse(response: any): AIResponse {
+    try {
+      if (response.content && Array.isArray(response.content)) {
+        const textContent = response.content
+          .filter((item: any) => item.type === 'text')
+          .map((item: any) => item.text)
+          .join('');
+
+        const aiResponse: AIResponse = {
+          content: textContent,
+          finishReason: response.stop_reason
+        };
+
+        // Add usage information if available
+        if (response.usage) {
+          aiResponse.usage = {
+            promptTokens: response.usage.input_tokens,
+            completionTokens: response.usage.output_tokens,
+            totalTokens: response.usage.input_tokens + response.usage.output_tokens
+          };
+        }
+
+        // Handle tool calls (Claude format)
+        const toolCalls = response.content.filter((item: any) => item.type === 'tool_use');
+        if (toolCalls.length > 0) {
+          aiResponse.toolCalls = toolCalls.map((call: any) => ({
+            function: {
+              name: call.name,
+              arguments: JSON.stringify(call.input)
+            }
+          }));
+        }
+
+        return aiResponse;
+      }
+
+      throw new Error('No content in response');
+    } catch (error) {
+      throw new Error(`Failed to parse Anthropic response: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

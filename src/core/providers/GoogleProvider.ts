@@ -3,7 +3,7 @@
  * Handles authentication and model management for Google AI services
  */
 
-import { BaseProvider, ProviderAuthResult, ProviderConfig } from './BaseProvider';
+import { BaseProvider, ProviderAuthResult, ProviderConfig, AIMessage, GenerationOptions, AIResponse } from './BaseProvider';
 
 /**
  * Google AI API configuration
@@ -74,6 +74,10 @@ export class GoogleProvider extends BaseProvider {
 
   get modelsEndpoint(): string {
     return `${this.config.baseUrl}/${this.apiVersion}/models`;
+  }
+
+  get completionEndpoint(): string {
+    return `${this.config.baseUrl}/${this.apiVersion}/models/${this.config.defaultModel}:generateContent`;
   }
 
   /**
@@ -239,6 +243,130 @@ export class GoogleProvider extends BaseProvider {
   protected validateApiKeyFormat(apiKey: string): boolean {
     // Google AI API keys are typically 39 characters long and alphanumeric
     return apiKey.length >= 20 && /^[A-Za-z0-9_-]+$/.test(apiKey);
+  }
+
+  /**
+   * Override generateResponse to handle API key in URL
+   */
+  async generateResponse(messages: AIMessage[], options: GenerationOptions = {}): Promise<AIResponse> {
+    if (!this.apiKey) {
+      throw new Error('API key not set');
+    }
+
+    try {
+      const requestBody = this.formatCompletionRequest(messages, {
+        maxTokens: 1000,
+        temperature: 0.7,
+        ...options
+      });
+
+      const urlWithKey = this.addApiKeyToUrl(this.completionEndpoint);
+
+      const response = await this.makeHttpRequest({
+        method: 'POST',
+        headers: {
+          ...this.formatAuthHeaders(this.apiKey),
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody),
+        timeout: this.config.timeout
+      }, urlWithKey);
+
+      if (!response.ok) {
+        const errorMsg = this.extractErrorMessage(response.data);
+        throw new Error(`HTTP ${response.status}: ${errorMsg}`);
+      }
+
+      return this.parseCompletionResponse(response.data);
+    } catch (error) {
+      console.error(`Failed to generate response from ${this.providerId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Format completion request for Google AI API
+   */
+  protected formatCompletionRequest(messages: AIMessage[], options: GenerationOptions): any {
+    // Convert messages to Google AI format
+    const contents = [];
+    
+    for (const message of messages) {
+      if (message.role === 'system') {
+        // Google AI doesn't have system role, so we'll prepend it to the first user message
+        continue;
+      }
+      
+      contents.push({
+        role: message.role === 'assistant' ? 'model' : 'user',
+        parts: [{
+          text: message.content
+        }]
+      });
+    }
+
+    // Add system message as first user message if present
+    const systemMessage = messages.find(msg => msg.role === 'system');
+    if (systemMessage && contents.length > 0 && contents[0].role === 'user') {
+      contents[0].parts[0].text = `${systemMessage.content}\n\n${contents[0].parts[0].text}`;
+    }
+
+    const request: any = {
+      contents,
+      generationConfig: {
+        maxOutputTokens: options.maxTokens || 1000
+      }
+    };
+
+    // Add temperature if specified
+    if (options.temperature !== undefined) {
+      request.generationConfig.temperature = options.temperature;
+    }
+
+    // Google AI tools format is different - would need more complex implementation
+    // For now, skip tools support
+
+    return request;
+  }
+
+  /**
+   * Parse completion response from Google AI
+   */
+  protected parseCompletionResponse(response: any): AIResponse {
+    try {
+      if (response.candidates && response.candidates.length > 0) {
+        const candidate = response.candidates[0];
+        const content = candidate.content;
+
+        let textContent = '';
+        if (content && content.parts) {
+          textContent = content.parts
+            .filter((part: any) => part.text)
+            .map((part: any) => part.text)
+            .join('');
+        }
+
+        const aiResponse: AIResponse = {
+          content: textContent,
+          finishReason: candidate.finishReason
+        };
+
+        // Add usage information if available
+        if (response.usageMetadata) {
+          aiResponse.usage = {
+            promptTokens: response.usageMetadata.promptTokenCount || 0,
+            completionTokens: response.usageMetadata.candidatesTokenCount || 0,
+            totalTokens: response.usageMetadata.totalTokenCount || 0
+          };
+        }
+
+        return aiResponse;
+      }
+
+      throw new Error('No candidates in response');
+    } catch (error) {
+      throw new Error(`Failed to parse Google AI response: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   /**

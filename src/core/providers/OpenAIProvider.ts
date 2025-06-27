@@ -3,7 +3,7 @@
  * Handles authentication and model management for OpenAI services
  */
 
-import { BaseProvider, ProviderAuthResult, ProviderConfig } from './BaseProvider';
+import { BaseProvider, ProviderAuthResult, ProviderConfig, AIMessage, GenerationOptions, AIResponse } from './BaseProvider';
 
 /**
  * OpenAI API configuration
@@ -73,6 +73,10 @@ export class OpenAIProvider extends BaseProvider {
 
   get modelsEndpoint(): string {
     return `${this.config.baseUrl}/${this.apiVersion}/models`;
+  }
+
+  get completionEndpoint(): string {
+    return `${this.config.baseUrl}/${this.apiVersion}/chat/completions`;
   }
 
   /**
@@ -282,6 +286,71 @@ export class OpenAIProvider extends BaseProvider {
     }
 
     return { currency: 'USD' };
+  }
+
+  /**
+   * Format completion request for OpenAI API
+   */
+  protected formatCompletionRequest(messages: AIMessage[], options: GenerationOptions): any {
+    const request: any = {
+      model: this.config.defaultModel,
+      messages: messages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      })),
+      max_tokens: options.maxTokens || 1000,
+      temperature: options.temperature || 0.7
+    };
+
+    // Add tools if provided
+    if (options.tools && options.tools.length > 0) {
+      request.tools = options.tools;
+      request.tool_choice = 'auto';
+    }
+
+    // Add streaming if requested
+    if (options.stream) {
+      request.stream = true;
+    }
+
+    return request;
+  }
+
+  /**
+   * Parse completion response from OpenAI
+   */
+  protected parseCompletionResponse(response: any): AIResponse {
+    try {
+      if (response.choices && response.choices.length > 0) {
+        const choice = response.choices[0];
+        const message = choice.message;
+
+        const aiResponse: AIResponse = {
+          content: message.content || '',
+          finishReason: choice.finish_reason
+        };
+
+        // Add usage information if available
+        if (response.usage) {
+          aiResponse.usage = {
+            promptTokens: response.usage.prompt_tokens,
+            completionTokens: response.usage.completion_tokens,
+            totalTokens: response.usage.total_tokens
+          };
+        }
+
+        // Add tool calls if present
+        if (message.tool_calls && message.tool_calls.length > 0) {
+          aiResponse.toolCalls = message.tool_calls;
+        }
+
+        return aiResponse;
+      }
+
+      throw new Error('No choices in response');
+    } catch (error) {
+      throw new Error(`Failed to parse OpenAI response: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   /**

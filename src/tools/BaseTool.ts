@@ -224,6 +224,13 @@ export abstract class BaseTool<TParams = any> {
   }
 
   /**
+   * Get parameter schema in JSON Schema format
+   */
+  getParameterSchema(): object {
+    return this.zodSchemaToJsonSchema(this.parameterSchema);
+  }
+
+  /**
    * Convert Zod schema to JSON Schema format for AI providers
    */
   private zodSchemaToJsonSchema(schema: z.ZodSchema): object {

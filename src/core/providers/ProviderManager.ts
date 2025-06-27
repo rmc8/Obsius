@@ -395,6 +395,35 @@ export class ProviderManager {
   }
 
   /**
+   * Get current provider (first authenticated provider or first enabled provider)
+   */
+  getCurrentProvider(): BaseProvider | null {
+    // First try to find an authenticated provider
+    for (const registration of this.providers.values()) {
+      if (registration.config.authenticated && registration.config.enabled) {
+        return registration.provider;
+      }
+    }
+    
+    // Fallback to first enabled provider with API key
+    for (const registration of this.providers.values()) {
+      if (registration.config.hasApiKey && registration.config.enabled) {
+        return registration.provider;
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * Get provider by ID
+   */
+  getProviderById(providerId: string): BaseProvider | null {
+    const registration = this.providers.get(providerId);
+    return registration ? registration.provider : null;
+  }
+
+  /**
    * Cleanup resources
    */
   destroy(): void {
