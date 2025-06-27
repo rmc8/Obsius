@@ -480,8 +480,30 @@ export class ProviderManager {
       }
 
       // Try to load API key from secure storage
-      const apiKey = await this.secureStorage.getApiKey(providerId);
+      let apiKey = await this.secureStorage.getApiKey(providerId);
       console.log(`🔐 Recovery attempt - API key found:`, !!apiKey);
+      
+      // Fallback: Try to get API key from plain settings if secure storage fails
+      if (!apiKey && registration.config.authenticated) {
+        console.log(`🔄 Attempting fallback recovery from settings for ${providerId}`);
+        
+        // Check if there's an API key in the old location
+        const pluginData = await (this.plugin as any).loadData();
+        if (pluginData?.providers?.[providerId]?.apiKey) {
+          apiKey = pluginData.providers[providerId].apiKey;
+          console.log(`✅ Found API key in legacy location for ${providerId}`);
+          
+          // Migrate it to secure storage if we have a valid key
+          if (apiKey) {
+            try {
+              await this.secureStorage.storeApiKey(providerId, apiKey);
+              console.log(`✅ Migrated API key to secure storage for ${providerId}`);
+            } catch (error) {
+              console.error(`❌ Failed to migrate API key to secure storage:`, error);
+            }
+          }
+        }
+      }
       
       if (apiKey) {
         // Set the API key in the provider

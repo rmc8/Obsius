@@ -142,7 +142,14 @@ export default class ObsiusPlugin extends Plugin {
 
     // Check for old plaintext API keys and migrate them
     const oldData = await this.loadData();
+    console.log('🔍 Checking plugin data for migration:', {
+      hasData: !!oldData,
+      keys: oldData ? Object.keys(oldData) : [],
+      hasProviders: !!oldData?.providers
+    });
+    
     if (oldData?.providers) {
+      console.log('📋 Provider data found:', Object.keys(oldData.providers));
       const hasOldKeys = Object.values(oldData.providers).some((p: any) => p.apiKey);
       if (hasOldKeys) {
         console.log('Migrating old API keys to secure storage...');
@@ -153,6 +160,8 @@ export default class ObsiusPlugin extends Plugin {
           delete provider.apiKey;
         }
         await this.saveData(oldData);
+      } else {
+        console.log('✅ No plaintext API keys found to migrate');
       }
     }
 

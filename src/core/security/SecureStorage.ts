@@ -288,6 +288,15 @@ export class SecureStorage {
         dataType: typeof data
       });
       
+      // Log the actual keys and their types for debugging
+      if (data && typeof data === 'object') {
+        console.log('🔑 Plugin data keys details:');
+        Object.keys(data).forEach(key => {
+          const value = data[key];
+          console.log(`  - ${key}: ${typeof value}${value && typeof value === 'object' ? ` (${Object.keys(value).length} keys)` : ''}`);
+        });
+      }
+      
       const secureData = data?.[this.config.dataKey];
       console.log(`🔐 Secure data for key '${this.config.dataKey}':`, {
         hasSecureData: !!secureData,
@@ -335,19 +344,43 @@ export class SecureStorage {
   private async saveSecureContainer(container: SecureDataContainer): Promise<void> {
     console.log(`💾 Saving secure container...`);
     
-    const data = await this.plugin.loadData() || {};
+    // Ensure we have a valid data object
+    let data: any;
+    try {
+      data = await this.plugin.loadData();
+      if (!data || typeof data !== 'object') {
+        console.warn('⚠️ Plugin data is invalid, creating new object');
+        data = {};
+      }
+    } catch (error) {
+      console.error('❌ Failed to load plugin data:', error);
+      data = {};
+    }
+    
     console.log(`📂 Current plugin data keys before save:`, Object.keys(data));
     
+    // Set the secure data
     data[this.config.dataKey] = container;
-    console.log(`📝 Set ${this.config.dataKey} in plugin data`);
+    console.log(`📝 Set ${this.config.dataKey} in plugin data with ${Object.keys(container.data).length} providers`);
     
-    await this.plugin.saveData(data);
-    console.log(`✅ Plugin data saved`);
+    // Save the data
+    try {
+      await this.plugin.saveData(data);
+      console.log(`✅ Plugin data saved successfully`);
+    } catch (error) {
+      console.error('❌ Failed to save plugin data:', error);
+      throw error;
+    }
     
     // Verify save was successful
-    const verifyData = await this.plugin.loadData();
-    const hasSavedKey = verifyData && this.config.dataKey in verifyData;
-    console.log(`🔍 Verification - ${this.config.dataKey} saved: ${hasSavedKey}`);
+    try {
+      const verifyData = await this.plugin.loadData();
+      const hasSavedKey = verifyData && this.config.dataKey in verifyData;
+      const savedProviders = verifyData?.[this.config.dataKey]?.data ? Object.keys(verifyData[this.config.dataKey].data) : [];
+      console.log(`🔍 Verification - ${this.config.dataKey} saved: ${hasSavedKey}, providers: ${savedProviders.join(', ')}`);
+    } catch (error) {
+      console.error('❌ Failed to verify save:', error);
+    }
   }
 
   /**
