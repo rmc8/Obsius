@@ -215,7 +215,7 @@ export interface ObsiusSettings {
   
   // UI settings
   ui: {
-    theme: 'light' | 'dark' | 'auto';
+    language: 'en' | 'ja';
     showTimestamps: boolean;
     enableStreaming: boolean;
     autoScroll: boolean;
@@ -269,6 +269,109 @@ export class UserCancelledError extends Error {
     super(message);
     this.name = 'UserCancelledError';
   }
+}
+
+// ============================================================================
+// Internationalization Types
+// ============================================================================
+
+/**
+ * Supported languages
+ */
+export type SupportedLanguage = 'en' | 'ja';
+
+/**
+ * Translation keys for the application
+ */
+export interface TranslationKeys {
+  // CLI Interface
+  cli: {
+    welcome: string;
+    welcomeVault: string;
+    welcomeHelp: string;
+    prompt: string;
+    thinking: string;
+    placeholder: string;
+  };
+  
+  // Commands
+  commands: {
+    help: {
+      name: string;
+      description: string;
+      usage: string;
+      availableCommands: string;
+      chatInstructions: string;
+    };
+    clear: {
+      name: string;
+      description: string;
+    };
+    provider: {
+      name: string;
+      description: string;
+      available: string;
+      status: string;
+      model: string;
+      lastVerified: string;
+      notFound: string;
+    };
+    settings: {
+      name: string;
+      description: string;
+      opened: string;
+    };
+    status: {
+      name: string;
+      description: string;
+      systemStatus: string;
+      currentProvider: string;
+      authentication: string;
+      commandHistory: string;
+      toolsAvailable: string;
+    };
+    unknown: {
+      error: string;
+      suggestion: string;
+    };
+  };
+  
+  // Provider Status
+  provider: {
+    connected: string;
+    notConnected: string;
+    none: string;
+    noAuthenticated: string;
+    checkStatus: string;
+    configure: string;
+  };
+  
+  // Tool Messages
+  tools: {
+    aiIntegration: string;
+    placeholder: string;
+    comingSoon: string;
+  };
+  
+  // Settings
+  settings: {
+    language: string;
+    languageDescription: string;
+    english: string;
+    japanese: string;
+  };
+  
+  // General
+  general: {
+    error: string;
+    success: string;
+    info: string;
+    loading: string;
+    cancel: string;
+    confirm: string;
+    yes: string;
+    no: string;
+  };
 }
 
 // ============================================================================

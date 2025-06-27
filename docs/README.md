@@ -1,39 +1,93 @@
 # Obsius Documentation
 
-This directory contains documentation for the Obsius Obsidian plugin - an AI agent interface for Obsidian.
+Welcome to the Obsius documentation! This directory contains comprehensive guides and technical documentation for the Obsius AI Agent plugin for Obsidian.
 
-## Documentation Structure
+## 📋 Documentation Index
 
-### Architecture
-- `architecture/architecture.md` - System architecture and design patterns
-- `architecture/langchain-architecture.md` - LangChain integration architecture
+### User Guides
+- **[CLI Interface Guide](cli-interface.md)** - Complete user guide for the terminal-like chat interface
+  - Getting started with the CLI
+  - Built-in commands reference  
+  - AI chat interaction patterns
+  - Keyboard navigation and shortcuts
+  - Troubleshooting common issues
 
-### Specifications
-- `specifications/technical-specification.md` - Detailed technical implementation specs
-- `specifications/core-features-specification.md` - Core feature requirements
-- `specifications/configuration-specification.md` - Configuration system design
-- `specifications/ui-ux-specification.md` - User interface specifications
+### Technical Documentation
+- **[Architecture Overview](architecture.md)** - System design and component details
+  - Core system design and data flow
+  - Current implementation status
+  - File structure and organization
+  - Component responsibilities
+  - Extension points and patterns
 
-### Analysis
-- `analysis/gemini-cli-analysis.md` - Analysis of Gemini CLI implementation patterns
+- **[Development Guide](development-guide.md)** - Coding patterns and contribution guidelines
+  - Development setup and workflow
+  - Code style and conventions
+  - Adding new tools and providers
+  - Testing strategies
+  - Performance considerations
+  - Security guidelines
 
-### Integrations
-- `integrations/obsidian-integration.md` - Obsidian-specific integration requirements
+### Legacy Documentation (Archive)
+- `architecture/` - Legacy system architecture documents
+- `specifications/` - Original technical specifications
+- `development/` - Early development documentation
+- `integrations/` - Integration analysis documents
+- `archive/` - Historical documentation
 
-### Development
-- `development/tool-definitions.md` - Tool system documentation
-- `development/agent-workflows.md` - AI agent workflow definitions
-- `development/performance-considerations.md` - Performance optimization guidelines
+### Quick References
+- **[Main README](../README.md)** - Project overview, quick start, and installation
+- **[CLAUDE.md](../CLAUDE.md)** - Development guidance for Claude Code users
+- **[Contributing Guidelines](../CONTRIBUTING.md)** - How to contribute to the project
 
-## Project Overview
+## 🎯 Getting Started
 
-Obsius aims to provide a CLI-style AI agent interface within Obsidian, similar to ClaudeCode, Gemini CLI, and OpenHands. The plugin will allow users to interact with AI agents to perform various operations on their Obsidian vault and notes.
+### For Users
+1. Start with the **[Main README](../README.md)** for installation and setup
+2. Learn the interface with the **[CLI Interface Guide](cli-interface.md)**
+3. Check troubleshooting sections for common issues
 
-## Key Features (Planned)
+### For Developers
+1. Review the **[Architecture Overview](architecture.md)** to understand the system
+2. Follow the **[Development Guide](development-guide.md)** for coding patterns
+3. Check **[CLAUDE.md](../CLAUDE.md)** for AI-assisted development guidance
+4. Read **[Contributing Guidelines](../CONTRIBUTING.md)** before submitting changes
 
-- CLI-style command interface within Obsidian
-- Multi-provider AI support (Claude, Gemini, etc.)
-- Obsidian-specific operations (note manipulation, vault management)
-- Tool system for extensible functionality
-- Session management for persistent conversations
-- Integration with Obsidian's existing UI and workflows
+## 🔄 Current Implementation Status
+
+### ✅ Completed Features
+- **CLI Interface**: Terminal-like chat interface in Obsidian sidebar
+- **Provider Management**: Secure API key storage for OpenAI, Anthropic, Google
+- **Tool System**: Basic Obsidian operations (create, read, search, update notes)
+- **Command Processing**: Built-in commands with history and tab completion
+
+### 🔄 In Development
+- **AI Integration**: Connecting chat interface with AI providers
+- **Agent Orchestrator**: Coordinating AI responses with tool execution
+- **Streaming Support**: Real-time response generation
+
+### ⏳ Planned Features
+- **Security Framework**: Risk assessment and user confirmation
+- **Session Management**: Enhanced conversation persistence
+- **Context Awareness**: Understanding workspace and file state
+
+## 🔍 Finding Information
+
+### Looking for...
+- **How to use the CLI?** → [CLI Interface Guide](cli-interface.md)
+- **System architecture?** → [Architecture Overview](architecture.md)  
+- **Development setup?** → [Development Guide](development-guide.md)
+- **How to contribute?** → [Contributing Guidelines](../CONTRIBUTING.md)
+- **Current development status?** → [CLAUDE.md](../CLAUDE.md)
+- **Project overview?** → [Main README](../README.md)
+
+### Common Tasks
+- **Installing the plugin** → [Main README: Installation](../README.md#installation-development)
+- **Using CLI commands** → [CLI Interface: Built-in Commands](cli-interface.md#built-in-commands)
+- **Adding new tools** → [Development Guide: Adding New Tools](development-guide.md#adding-new-tools)
+- **Understanding data flow** → [Architecture: Message Flow](architecture.md#message-flow-architecture)
+- **Troubleshooting** → [CLI Interface: Troubleshooting](cli-interface.md#troubleshooting)
+
+---
+
+This documentation is maintained alongside the codebase to ensure accuracy and completeness. For questions or suggestions, please open an issue or contribute improvements following our [Contributing Guidelines](../CONTRIBUTING.md).
