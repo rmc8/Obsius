@@ -17,6 +17,7 @@ import { ExecutionContext, ObsiusSettings, SecureProviderConfig } from './src/ut
 import { ProviderManager } from './src/core/providers/ProviderManager';
 import { ApiKeyInput } from './src/ui/components/ApiKeyInput';
 import { ChatView, VIEW_TYPE_OBSIUS_CHAT } from './src/ui/views/ChatView';
+import { initializeI18n } from './src/utils/i18n';
 
 /**
  * Default plugin settings
@@ -56,7 +57,7 @@ const DEFAULT_SETTINGS: ObsiusSettings = {
     }
   },
   ui: {
-    theme: 'auto',
+    language: 'en',
     showTimestamps: true,
     enableStreaming: false,
     autoScroll: true
@@ -82,6 +83,9 @@ export default class ObsiusPlugin extends Plugin {
 
     // Load settings
     await this.loadSettings();
+
+    // Initialize i18n system
+    initializeI18n(this.settings.ui.language);
 
     // Initialize provider manager
     await this.initializeProviderManager();
@@ -424,6 +428,11 @@ export default class ObsiusPlugin extends Plugin {
       const enabled = this.settings.tools.enabled.includes(toolName);
       this.toolRegistry.setToolEnabled(toolName, enabled);
     }
+
+    // Update ChatView language if language setting changed
+    if (this.chatView) {
+      this.chatView.updateLanguage();
+    }
   }
 }
 
@@ -720,6 +729,19 @@ class ObsiusSettingTab extends PluginSettingTab {
    */
   private createUISettings(containerEl: HTMLElement): void {
     containerEl.createEl('h3', { text: 'Interface Settings' });
+
+    new Setting(containerEl)
+      .setName('Language')
+      .setDesc('Select interface language')
+      .addDropdown(dropdown => {
+        dropdown.addOption('en', 'English');
+        dropdown.addOption('ja', '日本語');
+        dropdown.setValue(this.plugin.settings.ui.language);
+        dropdown.onChange(async (value: 'en' | 'ja') => {
+          this.plugin.settings.ui.language = value;
+          await this.plugin.saveSettings();
+        });
+      });
 
     new Setting(containerEl)
       .setName('Show Timestamps')

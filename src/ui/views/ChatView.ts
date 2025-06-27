@@ -5,6 +5,7 @@
 
 import { ItemView, WorkspaceLeaf } from 'obsidian';
 import ObsiusPlugin from '../../../main';
+import { t, initializeI18n, formatDate, getCommandDescriptions } from '../../utils/i18n';
 
 export const VIEW_TYPE_OBSIUS_CHAT = 'obsius-chat-view';
 
@@ -23,6 +24,9 @@ export class ChatView extends ItemView {
   constructor(leaf: WorkspaceLeaf, plugin: ObsiusPlugin) {
     super(leaf);
     this.plugin = plugin;
+    
+    // Initialize i18n with user's language preference
+    initializeI18n(this.plugin.settings.ui.language);
   }
 
   getViewType(): string {
@@ -71,11 +75,11 @@ export class ChatView extends ItemView {
    * Show simple welcome message
    */
   private showWelcome(): void {
-    this.addOutput('✻ Welcome to Obsius v0.1.0!');
+    this.addOutput(t('cli.welcome'));
     this.addOutput('');
-    this.addOutput('Vault: ' + this.getVaultName());
+    this.addOutput(t('cli.welcomeVault', { vaultName: this.getVaultName() }));
     this.addOutput('');
-    this.addOutput('Type /help for commands or start chatting.');
+    this.addOutput(t('cli.welcomeHelp'));
   }
 
   /**
@@ -130,7 +134,7 @@ export class ChatView extends ItemView {
    * Get command prompt
    */
   private getPrompt(): string {
-    return '$ ';
+    return t('cli.prompt');
   }
 
   /**
@@ -138,8 +142,8 @@ export class ChatView extends ItemView {
    */
   private getInputPlaceholder(): string {
     const provider = this.getCurrentProvider();
-    const providerName = this.plugin.settings.providers[provider]?.name || 'None';
-    return `obsius (${providerName})`;
+    const providerName = this.plugin.settings.providers[provider]?.name || t('provider.none');
+    return t('cli.placeholder', { providerName });
   }
 
   /**
@@ -201,7 +205,7 @@ export class ChatView extends ItemView {
     if (matches.length === 1) {
       this.currentInput.value = matches[0] + ' ';
     } else if (matches.length > 1) {
-      this.addOutput(`Available commands: ${matches.join(', ')}`);
+      this.addOutput(t('commands.help.availableCommands', { commands: matches.join(', ') }));
     }
   }
 
@@ -247,8 +251,8 @@ export class ChatView extends ItemView {
         this.showStatus();
         break;
       default:
-        this.addOutput(`Unknown command: ${command}`, 'error');
-        this.addOutput('Type /help for available commands', 'info');
+        this.addOutput(t('commands.unknown.error', { command }), 'error');
+        this.addOutput(t('commands.unknown.suggestion'), 'info');
     }
   }
 
@@ -260,22 +264,22 @@ export class ChatView extends ItemView {
     const config = this.plugin.settings.providers[provider];
     
     if (!config?.authenticated) {
-      this.addOutput('Error: No authenticated AI provider available', 'error');
-      this.addOutput('Use /provider to check provider status or /settings to configure', 'info');
+      this.addOutput(t('provider.noAuthenticated'), 'error');
+      this.addOutput(t('provider.checkStatus'), 'info');
       return;
     }
     
     // Show thinking indicator
-    this.addOutput('🤔 Thinking...', 'info');
+    this.addOutput(t('cli.thinking'), 'info');
     
     try {
       // TODO: Integrate with AgentOrchestrator
       await this.simulateTypingDelay();
-      this.addOutput("AI integration is still being implemented. This is a placeholder response.", 'info');
-      this.addOutput("Soon I'll be able to help you with your Obsidian vault!");
+      this.addOutput(t('tools.aiIntegration'), 'info');
+      this.addOutput(t('tools.placeholder'));
       
     } catch (error) {
-      this.addOutput(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+      this.addOutput(`${t('general.error')}: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
     }
   }
 
@@ -283,14 +287,13 @@ export class ChatView extends ItemView {
    * Show help information
    */
   private showHelp(): void {
-    this.addOutput('Commands:');
-    this.addOutput('  /help      Show commands');
-    this.addOutput('  /clear     Clear terminal');
-    this.addOutput('  /provider  Show providers');
-    this.addOutput('  /settings  Open settings');
-    this.addOutput('  /status    Show status');
+    this.addOutput(t('commands.help.usage'));
+    const commands = getCommandDescriptions();
+    commands.forEach(({ command, description }) => {
+      this.addOutput(`  ${command.padEnd(10)} ${description}`);
+    });
     this.addOutput('');
-    this.addOutput('Type any message to chat with AI.');
+    this.addOutput(t('commands.help.chatInstructions'));
   }
 
   /**
@@ -308,16 +311,19 @@ export class ChatView extends ItemView {
       const config = this.plugin.settings.providers[providerId];
       if (config) {
         this.addOutput(`Provider: ${config.name}`, 'info');
-        this.addOutput(`Status: ${config.authenticated ? '✅ Connected' : '❌ Not connected'}`);
-        this.addOutput(`Model: ${config.model}`);
+        const status = config.authenticated ? t('provider.connected') : t('provider.notConnected');
+        this.addOutput(t('commands.provider.status', { status }));
+        this.addOutput(t('commands.provider.model', { model: config.model }));
         if (config.lastVerified) {
-          this.addOutput(`Last verified: ${new Date(config.lastVerified).toLocaleString()}`);
+          this.addOutput(t('commands.provider.lastVerified', { 
+            date: formatDate(new Date(config.lastVerified)) 
+          }));
         }
       } else {
-        this.addOutput(`Provider '${providerId}' not found`, 'error');
+        this.addOutput(t('commands.provider.notFound', { providerId }), 'error');
       }
     } else {
-      this.addOutput('Available providers:', 'info');
+      this.addOutput(t('commands.provider.available'), 'info');
       for (const [id, config] of Object.entries(this.plugin.settings.providers)) {
         const status = config.authenticated ? '✅' : '❌';
         this.addOutput(`  ${id}: ${config.name} ${status}`);
@@ -331,7 +337,7 @@ export class ChatView extends ItemView {
   private openSettings(): void {
     (this.plugin.app as any).setting.open();
     (this.plugin.app as any).setting.openTabById('obsius');
-    this.addOutput('Settings opened', 'success');
+    this.addOutput(t('commands.settings.opened'), 'success');
   }
 
   /**
@@ -341,14 +347,17 @@ export class ChatView extends ItemView {
     const currentProvider = this.getCurrentProvider();
     const config = this.plugin.settings.providers[currentProvider];
     
-    this.addOutput('System Status:', 'info');
-    this.addOutput(`Current provider: ${config?.name || 'None'}`);
-    this.addOutput(`Authentication: ${config?.authenticated ? '✅ Connected' : '❌ Not connected'}`);
-    this.addOutput(`Command history: ${this.commandHistory.length} entries`);
+    this.addOutput(t('commands.status.systemStatus'), 'info');
+    this.addOutput(t('commands.status.currentProvider', { 
+      provider: config?.name || t('provider.none') 
+    }));
+    const authStatus = config?.authenticated ? t('provider.connected') : t('provider.notConnected');
+    this.addOutput(t('commands.status.authentication', { status: authStatus }));
+    this.addOutput(t('commands.status.commandHistory', { count: this.commandHistory.length }));
     
     const stats = this.plugin.toolRegistry?.getStats();
     if (stats) {
-      this.addOutput(`Tools available: ${stats.enabled}`);
+      this.addOutput(t('commands.status.toolsAvailable', { count: stats.enabled }));
     }
   }
 
@@ -395,6 +404,17 @@ export class ChatView extends ItemView {
    */
   public refreshProviders(): void {
     // Update prompt with new provider info
+    this.updatePrompt();
+  }
+
+  /**
+   * Update language (called when language setting is changed)
+   */
+  public updateLanguage(): void {
+    // Re-initialize i18n with new language
+    initializeI18n(this.plugin.settings.ui.language);
+    
+    // Update prompt and placeholder
     this.updatePrompt();
   }
 
