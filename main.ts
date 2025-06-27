@@ -14,6 +14,8 @@ import {
   UpdateNoteTool 
 } from './src/tools';
 import { ExecutionContext, ObsiusSettings } from './src/utils/types';
+import { ProviderManager } from './src/core/providers/ProviderManager';
+import { ApiKeyInput } from './src/ui/components/ApiKeyInput';
 
 /**
  * Default plugin settings
@@ -23,12 +25,23 @@ const DEFAULT_SETTINGS: ObsiusSettings = {
     openai: {
       name: 'OpenAI',
       model: 'gpt-4',
-      enabled: true
+      enabled: true,
+      authenticated: false,
+      hasApiKey: false
     },
-    claude: {
+    anthropic: {
       name: 'Anthropic Claude',
-      model: 'claude-3-sonnet',
-      enabled: false
+      model: 'claude-3-sonnet-20240229',
+      enabled: true,
+      authenticated: false,
+      hasApiKey: false
+    },
+    google: {
+      name: 'Google AI (Gemini)',
+      model: 'gemini-pro',
+      enabled: true,
+      authenticated: false,
+      hasApiKey: false
     }
   },
   defaultProvider: 'openai',
@@ -60,12 +73,16 @@ const DEFAULT_SETTINGS: ObsiusSettings = {
 export default class ObsiusPlugin extends Plugin {
   settings: ObsiusSettings;
   toolRegistry: ToolRegistry;
+  providerManager: ProviderManager;
 
   async onload() {
     console.log('Loading Obsius AI Agent plugin...');
 
     // Load settings
     await this.loadSettings();
+
+    // Initialize provider manager
+    await this.initializeProviderManager();
 
     // Initialize tool registry
     this.initializeToolRegistry();
@@ -90,6 +107,39 @@ export default class ObsiusPlugin extends Plugin {
 
   onunload() {
     console.log('Unloading Obsius AI Agent plugin...');
+    
+    // Cleanup provider manager
+    if (this.providerManager) {
+      this.providerManager.destroy();
+    }
+  }
+
+  /**
+   * Initialize provider manager with secure API key handling
+   */
+  private async initializeProviderManager(): Promise<void> {
+    this.providerManager = new ProviderManager(this);
+    await this.providerManager.initialize();
+
+    // Check for old plaintext API keys and migrate them
+    const oldData = await this.loadData();
+    if (oldData?.providers) {
+      const hasOldKeys = Object.values(oldData.providers).some((p: any) => p.apiKey);
+      if (hasOldKeys) {
+        console.log('Migrating old API keys to secure storage...');
+        await this.providerManager.migrateFromPlaintext(oldData.providers);
+        
+        // Clear old plaintext keys from settings
+        for (const provider of Object.values(oldData.providers) as any[]) {
+          delete provider.apiKey;
+        }
+        await this.saveData(oldData);
+      }
+    }
+
+    // Sync provider configurations with settings
+    const providerConfigs = this.providerManager.getAllProviderConfigs();
+    this.settings.providers = providerConfigs;
   }
 
   /**
@@ -266,10 +316,12 @@ export default class ObsiusPlugin extends Plugin {
 }
 
 /**
- * Settings tab for Obsius plugin
+ * Settings tab for Obsius plugin with secure API key management
  */
 class ObsiusSettingTab extends PluginSettingTab {
   plugin: ObsiusPlugin;
+  private apiKeyInputs: Map<string, ApiKeyInput> = new Map();
+  private providerStatusElements: Map<string, HTMLElement> = new Map();
 
   constructor(app: App, plugin: ObsiusPlugin) {
     super(app, plugin);
@@ -283,14 +335,29 @@ class ObsiusSettingTab extends PluginSettingTab {
     containerEl.createEl('h2', { text: 'Obsius AI Agent Settings' });
 
     // AI Provider Settings
+    this.createProviderSettings(containerEl);
+
+    // Tool Settings
+    this.createToolSettings(containerEl);
+
+    // UI Settings
+    this.createUISettings(containerEl);
+  }
+
+  /**
+   * Create AI provider settings section
+   */
+  private createProviderSettings(containerEl: HTMLElement): void {
     containerEl.createEl('h3', { text: 'AI Provider Settings' });
 
+    // Default provider selection
     new Setting(containerEl)
       .setName('Default Provider')
-      .setDesc('Select the default AI provider')
+      .setDesc('Select the default AI provider for chat interactions')
       .addDropdown(dropdown => {
-        dropdown.addOption('openai', 'OpenAI');
-        dropdown.addOption('claude', 'Anthropic Claude');
+        for (const [providerId, config] of Object.entries(this.plugin.settings.providers)) {
+          dropdown.addOption(providerId, config.name);
+        }
         dropdown.setValue(this.plugin.settings.defaultProvider);
         dropdown.onChange(async (value) => {
           this.plugin.settings.defaultProvider = value;
@@ -298,27 +365,217 @@ class ObsiusSettingTab extends PluginSettingTab {
         });
       });
 
-    // OpenAI Settings
-    new Setting(containerEl)
-      .setName('OpenAI API Key')
-      .setDesc('Enter your OpenAI API key')
-      .addText(text => {
-        text.setPlaceholder('sk-...');
-        text.setValue(this.plugin.settings.providers.openai?.apiKey || '');
-        text.onChange(async (value) => {
-          if (!this.plugin.settings.providers.openai) {
-            this.plugin.settings.providers.openai = {
-              name: 'OpenAI',
-              model: 'gpt-4',
-              enabled: true
-            };
-          }
-          this.plugin.settings.providers.openai.apiKey = value;
-          await this.plugin.saveSettings();
-        });
+    // Provider status overview
+    this.createProviderOverview(containerEl);
+
+    // Individual provider settings
+    this.createIndividualProviderSettings(containerEl);
+  }
+
+  /**
+   * Create provider status overview
+   */
+  private createProviderOverview(containerEl: HTMLElement): void {
+    const overviewEl = containerEl.createDiv('obsius-provider-overview');
+    overviewEl.createEl('h4', { text: 'Provider Status' });
+
+    const statusContainer = overviewEl.createDiv('obsius-status-grid');
+
+    for (const [providerId, config] of Object.entries(this.plugin.settings.providers)) {
+      const statusEl = statusContainer.createDiv('obsius-provider-status');
+      
+      statusEl.createEl('span', { 
+        text: config.name,
+        cls: 'obsius-provider-name'
       });
 
-    // Tool Settings
+      const statusIcon = statusEl.createEl('span', { cls: 'obsius-status-icon' });
+      
+      // Store reference for real-time updates
+      this.providerStatusElements.set(providerId, statusIcon);
+      
+      this.updateProviderStatusIcon(providerId, config, statusIcon);
+    }
+  }
+
+  /**
+   * Update provider status icon
+   */
+  private updateProviderStatusIcon(providerId: string, config: any, statusIcon: HTMLElement): void {
+    if (config.authenticated) {
+      statusIcon.textContent = '✅';
+      statusIcon.title = `Connected (${config.lastVerified ? new Date(config.lastVerified).toLocaleString() : 'Unknown'})`;
+    } else if (config.hasApiKey) {
+      statusIcon.textContent = '⚠️';
+      statusIcon.title = 'API key stored but not verified';
+    } else {
+      statusIcon.textContent = '❌';
+      statusIcon.title = 'No API key configured';
+    }
+  }
+
+  /**
+   * Create individual provider settings
+   */
+  private createIndividualProviderSettings(containerEl: HTMLElement): void {
+    containerEl.createEl('h4', { text: 'API Key Configuration' });
+
+    for (const [providerId, config] of Object.entries(this.plugin.settings.providers)) {
+      const provider = this.plugin.providerManager.getProvider(providerId);
+      if (!provider) continue;
+
+      const providerContainer = containerEl.createDiv('obsius-provider-config');
+      
+      // Create API key input
+      const apiKeyInput = new ApiKeyInput(providerContainer, {
+        provider,
+        placeholder: this.getPlaceholderForProvider(providerId),
+        description: this.getDescriptionForProvider(providerId),
+        onKeyChange: async (apiKey: string) => {
+          if (apiKey) {
+            const result = await this.plugin.providerManager.setProviderApiKey(providerId, apiKey);
+            if (result.success) {
+              // Update settings with new configuration
+              const updatedConfig = this.plugin.providerManager.getProviderConfig(providerId);
+              if (updatedConfig) {
+                this.plugin.settings.providers[providerId] = updatedConfig;
+                await this.plugin.saveSettings();
+              }
+            }
+          } else {
+            await this.plugin.providerManager.removeProviderApiKey(providerId);
+            const updatedConfig = this.plugin.providerManager.getProviderConfig(providerId);
+            if (updatedConfig) {
+              this.plugin.settings.providers[providerId] = updatedConfig;
+              await this.plugin.saveSettings();
+            }
+          }
+        },
+        onAuthResult: async (result) => {
+          console.log(`Auth result for ${providerId}:`, result);
+          
+          if (result.success) {
+            // Update provider status immediately
+            const updatedConfig = this.plugin.providerManager.getProviderConfig(providerId);
+            if (updatedConfig) {
+              this.plugin.settings.providers[providerId] = updatedConfig;
+              await this.plugin.saveSettings();
+              
+              // Update status icon in real-time
+              const statusIcon = this.providerStatusElements.get(providerId);
+              if (statusIcon) {
+                this.updateProviderStatusIcon(providerId, updatedConfig, statusIcon);
+              }
+              
+              // Show model selection immediately
+              this.showModelSelection(providerId, providerContainer, updatedConfig);
+            }
+          }
+        },
+        showTestButton: true,
+        autoValidate: true
+      });
+
+      this.apiKeyInputs.set(providerId, apiKeyInput);
+
+      // Add model selection if authenticated
+      this.showModelSelection(providerId, providerContainer, config);
+    }
+  }
+
+  /**
+   * Show model selection for authenticated provider
+   */
+  private showModelSelection(providerId: string, container: HTMLElement, config: any): void {
+    // Remove existing authenticated controls if any
+    const existingControls = container.querySelector('.obsius-authenticated-controls');
+    if (existingControls) {
+      existingControls.remove();
+    }
+
+    // Add authenticated controls if authenticated and models are available
+    if (config.authenticated && config.models && config.models.length > 0) {
+      const controlsContainer = container.createDiv('obsius-authenticated-controls');
+      
+      // Model selection
+      new Setting(controlsContainer)
+        .setName('Model')
+        .setDesc('Select the model to use for this provider')
+        .addDropdown(dropdown => {
+          if (config.models) {
+            for (const model of config.models) {
+              dropdown.addOption(model, model);
+            }
+          }
+          dropdown.setValue(config.model);
+          dropdown.onChange(async (value) => {
+            config.model = value;
+            this.plugin.settings.providers[providerId] = config;
+            await this.plugin.saveSettings();
+          });
+        });
+
+      // Disconnect button
+      new Setting(controlsContainer)
+        .setName('Connection')
+        .setDesc('Disconnect and remove API key from secure storage')
+        .addButton(button => {
+          button
+            .setButtonText('Disconnect')
+            .setClass('obsius-disconnect-button')
+            .onClick(async () => {
+              await this.disconnectProvider(providerId, container);
+            });
+        });
+    }
+  }
+
+  /**
+   * Disconnect provider and update UI
+   */
+  private async disconnectProvider(providerId: string, container: HTMLElement): Promise<void> {
+    try {
+      // Remove API key from secure storage
+      await this.plugin.providerManager.removeProviderApiKey(providerId);
+      
+      // Update settings
+      const updatedConfig = this.plugin.providerManager.getProviderConfig(providerId);
+      if (updatedConfig) {
+        this.plugin.settings.providers[providerId] = updatedConfig;
+        await this.plugin.saveSettings();
+      }
+
+      // Update status icon immediately
+      const statusIcon = this.providerStatusElements.get(providerId);
+      if (statusIcon) {
+        this.updateProviderStatusIcon(providerId, updatedConfig, statusIcon);
+      }
+
+      // Remove authenticated controls (model selection and disconnect button)
+      const authenticatedControls = container.querySelector('.obsius-authenticated-controls');
+      if (authenticatedControls) {
+        authenticatedControls.remove();
+      }
+
+      // Clear API key input
+      const apiKeyInput = this.apiKeyInputs.get(providerId);
+      if (apiKeyInput) {
+        apiKeyInput.setApiKey('');
+      }
+
+      // Show success message
+      new Notice(`${this.plugin.settings.providers[providerId]?.name || providerId} disconnected successfully`);
+
+    } catch (error) {
+      console.error(`Failed to disconnect ${providerId}:`, error);
+      new Notice(`Failed to disconnect ${providerId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Create tool settings section
+   */
+  private createToolSettings(containerEl: HTMLElement): void {
     containerEl.createEl('h3', { text: 'Tool Settings' });
 
     const toolStats = this.plugin.toolRegistry?.getStats();
@@ -328,7 +585,13 @@ class ObsiusSettingTab extends PluginSettingTab {
       });
     }
 
-    // UI Settings
+    // Could add individual tool enable/disable controls here
+  }
+
+  /**
+   * Create UI settings section
+   */
+  private createUISettings(containerEl: HTMLElement): void {
     containerEl.createEl('h3', { text: 'Interface Settings' });
 
     new Setting(containerEl)
@@ -352,5 +615,49 @@ class ObsiusSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         });
       });
+  }
+
+  /**
+   * Get placeholder text for provider
+   */
+  private getPlaceholderForProvider(providerId: string): string {
+    switch (providerId) {
+      case 'openai':
+        return 'sk-...';
+      case 'anthropic':
+        return 'sk-ant-...';
+      case 'google':
+        return 'AI...';
+      default:
+        return 'Enter API key...';
+    }
+  }
+
+  /**
+   * Get description for provider
+   */
+  private getDescriptionForProvider(providerId: string): string {
+    switch (providerId) {
+      case 'openai':
+        return 'Get your API key from https://platform.openai.com/api-keys';
+      case 'anthropic':
+        return 'Get your API key from https://console.anthropic.com/';
+      case 'google':
+        return 'Get your API key from https://ai.google.dev/';
+      default:
+        return 'Enter your API key for this provider';
+    }
+  }
+
+  /**
+   * Cleanup when settings tab is closed
+   */
+  hide(): void {
+    // Cleanup API key inputs
+    for (const input of this.apiKeyInputs.values()) {
+      input.destroy();
+    }
+    this.apiKeyInputs.clear();
+    this.providerStatusElements.clear();
   }
 }
