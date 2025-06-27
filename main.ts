@@ -16,6 +16,7 @@ import {
 import { ExecutionContext, ObsiusSettings, SecureProviderConfig } from './src/utils/types';
 import { ProviderManager } from './src/core/providers/ProviderManager';
 import { ApiKeyInput } from './src/ui/components/ApiKeyInput';
+import { ChatView, VIEW_TYPE_OBSIUS_CHAT } from './src/ui/views/ChatView';
 
 /**
  * Default plugin settings
@@ -74,6 +75,7 @@ export default class ObsiusPlugin extends Plugin {
   settings: ObsiusSettings;
   toolRegistry: ToolRegistry;
   providerManager: ProviderManager;
+  chatView: ChatView | null = null;
 
   async onload() {
     console.log('Loading Obsius AI Agent plugin...');
@@ -87,12 +89,15 @@ export default class ObsiusPlugin extends Plugin {
     // Initialize tool registry
     this.initializeToolRegistry();
 
+    // Register ChatView
+    this.registerChatView();
+
     // Register commands
     this.registerCommands();
 
-    // Add ribbon icon
-    this.addRibbonIcon('bot', 'Obsius AI Agent', () => {
-      new Notice('Obsius AI Agent is ready! Use Command Palette to access tools.');
+    // Add ribbon icon for chat
+    this.addRibbonIcon('bot', 'Open Obsius Chat', () => {
+      this.activateChatView();
     });
 
     // Add status bar
@@ -112,6 +117,9 @@ export default class ObsiusPlugin extends Plugin {
     if (this.providerManager) {
       this.providerManager.destroy();
     }
+    
+    // Cleanup chat view
+    this.chatView = null;
   }
 
   /**
@@ -162,6 +170,50 @@ export default class ObsiusPlugin extends Plugin {
         `${id}: ${config.authenticated ? 'authenticated' : 'not authenticated'}`
       ).join(', ')
     );
+  }
+
+  /**
+   * Register ChatView for side panel display
+   */
+  private registerChatView(): void {
+    this.registerView(
+      VIEW_TYPE_OBSIUS_CHAT,
+      (leaf) => {
+        this.chatView = new ChatView(leaf, this);
+        return this.chatView;
+      }
+    );
+  }
+
+  /**
+   * Activate chat view in right sidebar
+   */
+  async activateChatView(): Promise<void> {
+    const { workspace } = this.app;
+    
+    let leaf = workspace.getLeavesOfType(VIEW_TYPE_OBSIUS_CHAT)[0];
+    
+    if (!leaf) {
+      // Create new leaf in right sidebar
+      const rightLeaf = workspace.getRightLeaf(false);
+      if (rightLeaf) {
+        leaf = rightLeaf;
+        await leaf.setViewState({
+          type: VIEW_TYPE_OBSIUS_CHAT,
+          active: true
+        });
+      }
+    }
+    
+    // Reveal and focus the view
+    if (leaf) {
+      workspace.revealLeaf(leaf);
+      
+      // Update chat view with current provider states
+      if (this.chatView) {
+        this.chatView.refreshProviders();
+      }
+    }
   }
 
   /**
@@ -227,6 +279,15 @@ export default class ObsiusPlugin extends Plugin {
    * Register plugin commands
    */
   private registerCommands(): void {
+    // Open chat view command
+    this.addCommand({
+      id: 'open-chat',
+      name: 'Open AI Chat',
+      callback: () => {
+        this.activateChatView();
+      }
+    });
+
     // Test command for create note tool
     this.addCommand({
       id: 'test-create-note',
