@@ -425,8 +425,9 @@ export class ProviderManager {
 
   /**
    * Get current provider (first authenticated provider or first enabled provider)
+   * Now async to ensure API key recovery completes before returning
    */
-  getCurrentProvider(): BaseProvider | null {
+  async getCurrentProvider(): Promise<BaseProvider | null> {
     // First try to find an authenticated provider
     for (const [providerId, registration] of this.providers) {
       if (registration.config.authenticated && registration.config.enabled) {
@@ -435,10 +436,8 @@ export class ProviderManager {
         
         if (!hasApiKey) {
           console.warn(`⚠️ Provider ${providerId} is marked as authenticated but has no API key - attempting recovery`);
-          // Run recovery in background without blocking current call
-          this.attemptProviderRecovery(providerId).catch(error => {
-            console.error(`Recovery failed for ${providerId}:`, error);
-          });
+          // Wait for recovery to complete before continuing
+          await this.attemptProviderRecovery(providerId);
         }
         
         return registration.provider;
@@ -453,10 +452,8 @@ export class ProviderManager {
         
         if (!hasApiKey) {
           console.warn(`⚠️ Provider ${providerId} claims to have API key but doesn't - attempting recovery`);
-          // Run recovery in background without blocking current call
-          this.attemptProviderRecovery(providerId).catch(error => {
-            console.error(`Recovery failed for ${providerId}:`, error);
-          });
+          // Wait for recovery to complete before continuing
+          await this.attemptProviderRecovery(providerId);
         }
         
         return registration.provider;
@@ -528,8 +525,9 @@ export class ProviderManager {
 
   /**
    * Get provider by ID
+   * Now async to ensure API key recovery completes before returning
    */
-  getProviderById(providerId: string): BaseProvider | null {
+  async getProviderById(providerId: string): Promise<BaseProvider | null> {
     console.log(`🔍 getProviderById called with: ${providerId}`);
     
     const registration = this.providers.get(providerId);
@@ -543,9 +541,7 @@ export class ProviderManager {
     // If provider exists but lacks API key, attempt recovery
     if (registration && registration.config.authenticated && !(registration.provider as any)?.apiKey) {
       console.warn(`⚠️ Provider ${providerId} authenticated but missing API key - attempting recovery`);
-      this.attemptProviderRecovery(providerId).catch(error => {
-        console.error(`Recovery failed for ${providerId}:`, error);
-      });
+      await this.attemptProviderRecovery(providerId);
     }
     
     return registration ? registration.provider : null;

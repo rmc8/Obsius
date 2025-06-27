@@ -218,16 +218,34 @@ export abstract class BaseProvider {
    * Generate AI response using the provider
    */
   async generateResponse(messages: AIMessage[], options: GenerationOptions = {}): Promise<AIResponse> {
+    // Final API key check with detailed diagnostics
     if (!this.apiKey) {
       console.error(`❌ ${this.providerId} generateResponse called but API key not set`);
       console.error(`🔍 Provider diagnostic:`, {
         providerId: this.providerId,
         hasApiKey: !!this.apiKey,
         apiKeyType: typeof this.apiKey,
-        apiKeyLength: this.apiKey ? this.apiKey.length : 0
+        apiKeyLength: this.apiKey ? this.apiKey.length : 0,
+        currentTime: new Date().toISOString()
       });
-      throw new Error('API key not set');
+      
+      // Provide helpful guidance
+      console.error(`💡 Troubleshooting tips:`);
+      console.error(`   1. Check if API key was properly saved in settings`);
+      console.error(`   2. Verify provider authentication status`);
+      console.error(`   3. Try re-entering API key in plugin settings`);
+      console.error(`   4. Check console for SecureStorage errors`);
+      
+      throw new Error(`API key not set for ${this.providerId}. Please check plugin settings and re-enter API key.`);
     }
+    
+    // Validate API key format if possible
+    const isValidFormat = this.validateApiKeyFormat(this.apiKey);
+    if (!isValidFormat) {
+      console.warn(`⚠️ ${this.providerId} API key format may be invalid`);
+    }
+    
+    console.log(`✅ ${this.providerId} API key validated, proceeding with generation`);
 
     try {
       const requestBody = this.formatCompletionRequest(messages, {

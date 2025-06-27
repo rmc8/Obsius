@@ -198,8 +198,8 @@ export class AgentOrchestrator {
     
     // Use specific provider if provided in config, otherwise get current
     const currentProvider = config.providerId 
-      ? this.providerManager.getProviderById(config.providerId)
-      : this.providerManager.getCurrentProvider();
+      ? await this.providerManager.getProviderById(config.providerId)
+      : await this.providerManager.getCurrentProvider();
       
     console.log('📦 Provider retrieved:', {
       hasProvider: !!currentProvider,
@@ -277,8 +277,8 @@ export class AgentOrchestrator {
     
     // Use specific provider if provided in config, otherwise get current
     const currentProvider = config.providerId 
-      ? this.providerManager.getProviderById(config.providerId)
-      : this.providerManager.getCurrentProvider();
+      ? await this.providerManager.getProviderById(config.providerId)
+      : await this.providerManager.getCurrentProvider();
       
     console.log('📦 Provider retrieved:', {
       hasProvider: !!currentProvider,
