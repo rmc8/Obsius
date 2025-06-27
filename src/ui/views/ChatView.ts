@@ -286,19 +286,27 @@ export class ChatView extends ItemView {
       return;
     }
 
+    console.log('🤖 ChatView.sendChatMessage called with:', message);
+
     const provider = this.getCurrentProvider();
     const config = this.plugin.settings.providers[provider];
     
+    console.log('🔑 Current provider:', provider, 'config:', config);
+    
     if (!config?.authenticated) {
+      console.log('❌ Provider not authenticated');
       this.addOutput(t('provider.noAuthenticated'), 'error');
       this.addOutput(t('provider.checkStatus'), 'info');
       return;
     }
 
     if (!this.agentOrchestrator) {
+      console.log('❌ Agent orchestrator not initialized');
       this.addOutput(t('general.error') + ': Agent orchestrator not initialized', 'error');
       return;
     }
+
+    console.log('✅ All checks passed, proceeding with AI processing');
     
     this.isProcessing = true;
     
@@ -315,13 +323,15 @@ export class ChatView extends ItemView {
       const enableStreaming = this.plugin.settings.ui?.enableStreaming !== false;
       
       if (enableStreaming) {
+        console.log('🔄 Using streaming response');
         await this.sendStreamingChatMessage(message, context);
       } else {
+        console.log('⏳ Using non-streaming response');
         await this.sendNonStreamingChatMessage(message, context);
       }
       
     } catch (error) {
-      console.error('Chat error:', error);
+      console.error('❌ Chat error:', error);
       this.addOutput(`${t('general.error')}: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
     } finally {
       this.isProcessing = false;
@@ -332,6 +342,8 @@ export class ChatView extends ItemView {
    * Send chat message with streaming response
    */
   private async sendStreamingChatMessage(message: string, context: ConversationContext): Promise<void> {
+    console.log('🔄 Starting streaming chat message processing');
+    
     // Create streaming output line
     const streamingLine = this.addOutput('', 'normal');
     let accumulatedContent = '';
@@ -341,6 +353,7 @@ export class ChatView extends ItemView {
       message, 
       context,
       (chunk) => {
+        console.log('📦 Received chunk:', chunk);
         if (chunk.content) {
           accumulatedContent += chunk.content;
           streamingLine.textContent = accumulatedContent;
@@ -350,12 +363,12 @@ export class ChatView extends ItemView {
         }
         
         if (chunk.isComplete) {
-          // Streaming is complete
-          console.log('Streaming complete');
+          console.log('✅ Streaming complete');
         }
       }
     );
     
+    console.log('📋 Final response:', response);
     this.displayActionResults(response);
   }
 

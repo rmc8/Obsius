@@ -95,9 +95,9 @@ const en: TranslationKeys = {
   },
   
   tools: {
-    aiIntegration: 'AI integration is still being implemented. This is a placeholder response.',
-    placeholder: "Soon I'll be able to help you with your Obsidian vault!",
-    comingSoon: '🔄 AI integration coming soon...'
+    aiIntegration: 'AI integration is active and ready.',
+    placeholder: 'AI agent is ready to help with your Obsidian vault!',
+    comingSoon: '🔄 AI integration is now available'
   },
   
   settings: {
@@ -209,9 +209,9 @@ const ja: TranslationKeys = {
   },
   
   tools: {
-    aiIntegration: 'AI統合機能は現在開発中です。これは仮の応答です。',
-    placeholder: 'まもなくObsidian保管庫の操作をお手伝いできるようになります！',
-    comingSoon: '🔄 AI統合機能は近日公開予定...'
+    aiIntegration: 'AI統合機能がアクティブで準備完了です。',
+    placeholder: 'AIエージェントがObsidian保管庫のサポート準備完了です！',
+    comingSoon: '🔄 AI統合機能が利用可能になりました'
   },
   
   settings: {
