@@ -6,13 +6,19 @@ Obsius is an AI-powered plugin for Obsidian that provides a CLI-style agent inte
 
 ## ✨ Features
 
-- **🗣️ Natural Language Interface**: Chat with AI to manage your notes and vault
-- **🔧 Obsidian-Native Operations**: Create, search, update, and organize notes through AI commands
-- **🔀 Multi-Provider Support**: Works with Claude, GPT, Gemini, and local models
-- **📡 Real-time Streaming**: Live responses with progressive content generation
-- **🛡️ Security-First**: Risk assessment and user confirmation for sensitive operations
-- **🎯 Context-Aware**: Understands your current note, selection, and workspace state
-- **💾 Session Management**: Persistent conversations with intelligent history management
+### ✅ Currently Available
+- **🖥️ CLI-Style Interface**: Terminal-like chat interface in Obsidian's sidebar
+- **🔧 Basic Obsidian Operations**: Create, read, search, and update notes
+- **🔀 Multi-Provider Support**: OpenAI, Anthropic Claude, and Google Gemini integration
+- **🔐 Secure API Management**: Encrypted API key storage with authentication status
+- **⌨️ Rich Keyboard Support**: Command history, tab completion, familiar CLI navigation
+- **🎨 Theme Integration**: Seamless light/dark mode compatibility with Obsidian
+
+### 🔄 In Development
+- **🗣️ AI Chat Integration**: Natural language processing for note operations
+- **📡 Real-time Streaming**: Progressive AI response generation
+- **🛡️ Security Framework**: Risk assessment and user confirmation system
+- **🎯 Context Awareness**: Understanding of current workspace and file state
 
 ## 🎯 Project Goals
 
@@ -58,32 +64,63 @@ Obsius aims to provide the **efficiency of ClaudeCode with the knowledge managem
 
 1. **Open Obsius**: Click the robot icon in the ribbon or use `Ctrl+P` → "Obsius: Open AI Chat"
 2. **Configure Provider**: Go to Settings → Obsius and add your API key (Claude, OpenAI, or Gemini)
-3. **Start Chatting**: Begin with simple commands like:
-   - "Create a note about machine learning"
-   - "Search for notes about productivity"
-   - "Update my daily note with today's thoughts"
+3. **Try CLI Commands**: Start with built-in commands:
+   - `/help` - Show available commands
+   - `/status` - Check system status
+   - `/provider` - View provider information
 
-## 💬 Example Usage
+### CLI Interface
+
+Obsius provides a terminal-like interface with familiar CLI features:
 
 ```
+✻ Welcome to Obsius v0.1.0!
+
+Vault: YourVaultName
+
+Type /help for commands or start chatting.
+$ /help
+Commands:
+  /help      Show commands
+  /clear     Clear terminal
+  /provider  Show providers
+  /settings  Open settings
+  /status    Show status
+
+Type any message to chat with AI.
+$ 
+```
+
+For detailed CLI usage, see: [`docs/cli-interface.md`](docs/cli-interface.md)
+
+## 💬 Current Usage (CLI Commands)
+
+```
+$ /status
+System Status:
+Current provider: OpenAI
+Authentication: ✅ Connected
+Command history: 5 entries
+Tools available: 4
+
+$ /provider openai
+Provider: OpenAI
+Status: ✅ Connected
+Model: gpt-4
+Last verified: 2024-01-15 10:30:00
+
+$ test note creation
+🤔 AI integration coming soon...
+This is a placeholder response while AI chat is being implemented.
+```
+
+### Future AI Chat Example
+```
 You: Create a note about TypeScript best practices
+Obsius: ✅ Created note: "TypeScript Best Practices.md"
 
-Obsius: I'll create a comprehensive note about TypeScript best practices for you.
-
-✅ Created note: "TypeScript Best Practices.md"
-   Path: TypeScript Best Practices.md
-   Content: Structured guide with sections on type safety, interfaces, generics, and more.
-
-You: Find all notes related to programming
-
-Obsius: I found 12 notes related to programming:
-
-📄 JavaScript Fundamentals.md
-📄 React Development Guide.md
-📄 TypeScript Best Practices.md
-...
-
-Would you like me to create a summary of all programming notes?
+You: Find all notes related to programming  
+Obsius: 📄 Found 12 programming notes: JavaScript Fundamentals.md...
 ```
 
 ## 🏗️ Architecture
@@ -114,6 +151,13 @@ Obsius follows a **simple, chat-first architecture**:
 - **Tool System**: Extensible Obsidian operations (create, search, update, etc.)
 - **Provider System**: Multi-AI provider support with failover
 - **Security Layer**: Risk assessment and user confirmation for sensitive operations
+
+## 📚 Documentation
+
+- **[CLI Interface Guide](docs/cli-interface.md)** - Complete user guide for the chat interface
+- **[Architecture Overview](docs/architecture.md)** - System design and component details  
+- **[Development Guide](docs/development-guide.md)** - Coding patterns and contribution guidelines
+- **[CLAUDE.md](CLAUDE.md)** - Development guidance for Claude Code users
 
 ## 🛠️ Development
 
