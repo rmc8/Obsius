@@ -68,6 +68,44 @@
   transform: none;
 }
 
+.obsius-button-connecting {
+  background: var(--interactive-accent) !important;
+  color: var(--text-on-accent) !important;
+  cursor: wait !important;
+  position: relative;
+}
+
+.obsius-button-connecting::after {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  margin: auto;
+  border: 2px solid transparent;
+  border-top-color: var(--text-on-accent);
+  border-radius: 50%;
+  animation: obsius-spin 1s linear infinite;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.obsius-button-connected {
+  background: var(--color-green) !important;
+  color: var(--color-base-00) !important;
+  cursor: pointer !important;
+}
+
+.obsius-button-connected:hover {
+  background: var(--color-green-hover) !important;
+  transform: translateY(-1px);
+}
+
+@keyframes obsius-spin {
+  0% { transform: translateY(-50%) rotate(0deg); }
+  100% { transform: translateY(-50%) rotate(360deg); }
+}
+
 .obsius-disconnect-button {
   background: var(--background-modifier-error);
   color: var(--text-error);

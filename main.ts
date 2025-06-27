@@ -13,7 +13,7 @@ import {
   SearchNotesTool, 
   UpdateNoteTool 
 } from './src/tools';
-import { ExecutionContext, ObsiusSettings } from './src/utils/types';
+import { ExecutionContext, ObsiusSettings, SecureProviderConfig } from './src/utils/types';
 import { ProviderManager } from './src/core/providers/ProviderManager';
 import { ApiKeyInput } from './src/ui/components/ApiKeyInput';
 
@@ -119,7 +119,14 @@ export default class ObsiusPlugin extends Plugin {
    */
   private async initializeProviderManager(): Promise<void> {
     this.providerManager = new ProviderManager(this);
-    await this.providerManager.initialize();
+    
+    // Pass existing provider configurations to preserve authentication states
+    console.log('🔑 Initializing ProviderManager with existing auth states:', 
+      Object.entries(this.settings.providers).map(([id, config]) => 
+        `${id}: ${config.authenticated ? 'authenticated' : 'not authenticated'}`
+      ).join(', ')
+    );
+    await this.providerManager.initialize(this.settings.providers);
 
     // Check for old plaintext API keys and migrate them
     const oldData = await this.loadData();
@@ -137,9 +144,24 @@ export default class ObsiusPlugin extends Plugin {
       }
     }
 
-    // Sync provider configurations with settings
+    // Only sync new providers that might have been added
     const providerConfigs = this.providerManager.getAllProviderConfigs();
-    this.settings.providers = providerConfigs;
+    for (const [providerId, config] of Object.entries(providerConfigs)) {
+      // Only update if the provider doesn't exist in settings yet
+      if (!this.settings.providers[providerId]) {
+        this.settings.providers[providerId] = config;
+      }
+    }
+    
+    // Save settings to persist any new providers
+    await this.saveSettings();
+    
+    // Log final authentication states
+    console.log('🔑 Final provider auth states after initialization:', 
+      Object.entries(this.settings.providers).map(([id, config]) => 
+        `${id}: ${config.authenticated ? 'authenticated' : 'not authenticated'}`
+      ).join(', ')
+    );
   }
 
   /**
@@ -282,10 +304,39 @@ export default class ObsiusPlugin extends Plugin {
   }
 
   /**
-   * Load plugin settings
+   * Load plugin settings with proper provider configuration merging
    */
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const savedData = await this.loadData();
+    
+    // Start with default settings
+    this.settings = Object.assign({}, DEFAULT_SETTINGS);
+    
+    if (savedData) {
+      // Merge non-provider settings normally
+      Object.assign(this.settings, savedData);
+      
+      // Specially handle provider configurations to preserve authentication state
+      if (savedData.providers) {
+        for (const [providerId, savedProvider] of Object.entries(savedData.providers)) {
+          if (this.settings.providers[providerId]) {
+            // Merge saved provider config with default, preserving authentication state
+            this.settings.providers[providerId] = {
+              ...this.settings.providers[providerId],
+              ...(savedProvider as SecureProviderConfig)
+            };
+            
+            // Log authentication state loading
+            const authState = (savedProvider as any).authenticated ? 'authenticated' : 'not authenticated';
+            console.log(`🔑 Loaded ${providerId}: ${authState}${(savedProvider as any).lastVerified ? ` (verified: ${new Date((savedProvider as any).lastVerified).toLocaleString()})` : ''}`);
+          } else {
+            // Add new provider that wasn't in defaults
+            this.settings.providers[providerId] = savedProvider as any;
+            console.log(`🔑 Added new provider ${providerId}`);
+          }
+        }
+      }
+    }
   }
 
   /**
@@ -431,6 +482,9 @@ class ObsiusSettingTab extends PluginSettingTab {
         provider,
         placeholder: this.getPlaceholderForProvider(providerId),
         description: this.getDescriptionForProvider(providerId),
+        initialValue: config.hasApiKey ? 'stored-api-key' : '', // Placeholder for stored key
+        initialAuthenticated: config.authenticated,
+        initialLastVerified: config.lastVerified,
         onKeyChange: async (apiKey: string) => {
           if (apiKey) {
             const result = await this.plugin.providerManager.setProviderApiKey(providerId, apiKey);
@@ -455,21 +509,33 @@ class ObsiusSettingTab extends PluginSettingTab {
           console.log(`Auth result for ${providerId}:`, result);
           
           if (result.success) {
-            // Update provider status immediately
+            // Directly update authentication state in settings
+            this.plugin.settings.providers[providerId].authenticated = true;
+            this.plugin.settings.providers[providerId].lastVerified = new Date().toISOString();
+            this.plugin.settings.providers[providerId].models = result.models || [];
+            
+            // Save settings immediately to ensure persistence
+            await this.plugin.saveSettings();
+            console.log(`✅ Authentication state saved for ${providerId}`);
+            
+            // Also sync with ProviderManager for consistency
             const updatedConfig = this.plugin.providerManager.getProviderConfig(providerId);
             if (updatedConfig) {
-              this.plugin.settings.providers[providerId] = updatedConfig;
-              await this.plugin.saveSettings();
-              
               // Update status icon in real-time
               const statusIcon = this.providerStatusElements.get(providerId);
               if (statusIcon) {
-                this.updateProviderStatusIcon(providerId, updatedConfig, statusIcon);
+                this.updateProviderStatusIcon(providerId, this.plugin.settings.providers[providerId], statusIcon);
               }
               
               // Show model selection immediately
-              this.showModelSelection(providerId, providerContainer, updatedConfig);
+              this.showModelSelection(providerId, providerContainer, this.plugin.settings.providers[providerId]);
             }
+          } else {
+            // Handle authentication failure
+            this.plugin.settings.providers[providerId].authenticated = false;
+            this.plugin.settings.providers[providerId].lastVerified = undefined;
+            await this.plugin.saveSettings();
+            console.log(`❌ Authentication failed for ${providerId}: ${result.error}`);
           }
         },
         showTestButton: true,

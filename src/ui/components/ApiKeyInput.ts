@@ -28,6 +28,8 @@ export interface ApiKeyInputConfig {
   onKeyChange: (apiKey: string) => Promise<void>;
   onAuthResult: (result: ProviderAuthResult) => void;
   initialValue?: string;
+  initialAuthenticated?: boolean;
+  initialLastVerified?: string;
   showTestButton?: boolean;
   autoValidate?: boolean;
 }
@@ -52,7 +54,8 @@ export class ApiKeyInput {
       value: config.initialValue || '',
       masked: true,
       validating: false,
-      authenticated: false
+      authenticated: config.initialAuthenticated || false,
+      lastValidated: config.initialLastVerified ? new Date(config.initialLastVerified) : undefined
     };
 
     this.initialize();
@@ -158,7 +161,7 @@ export class ApiKeyInput {
   }
 
   /**
-   * Create test connection button
+   * Create connection button
    */
   private createTestButton(): void {
     this.setting.addButton(button => {
@@ -223,13 +226,21 @@ export class ApiKeyInput {
   }
 
   /**
-   * Test connection with the provider
+   * Establish connection with the provider
    */
   private async testConnection(): Promise<void> {
     if (!this.state.value) {
       this.state.error = 'API key is required';
       this.updateStatusDisplay();
       return;
+    }
+
+    // If already authenticated, confirm re-authentication
+    if (this.state.authenticated) {
+      const confirmReauth = confirm(`${this.config.provider.displayName} is already connected. Do you want to test the connection again?`);
+      if (!confirmReauth) {
+        return;
+      }
     }
 
     this.state.validating = true;
@@ -309,7 +320,7 @@ export class ApiKeyInput {
     this.statusElement.className = 'obsius-status-text';
     
     if (this.state.validating) {
-      this.statusElement.textContent = '🔄 Testing connection...';
+      this.statusElement.textContent = '🔄 Connecting...';
       this.statusElement.addClass('validating');
     } else if (this.state.error) {
       this.statusElement.textContent = `❌ ${this.state.error}`;
@@ -325,10 +336,26 @@ export class ApiKeyInput {
       this.statusElement.textContent = '';
     }
 
-    // Update test button state
+    // Update connection button state with enhanced feedback
     if (this.testButton) {
-      this.testButton.disabled = this.state.validating || !this.state.value;
-      this.testButton.textContent = this.state.validating ? 'Testing...' : 'Connection';
+      if (this.state.validating) {
+        this.testButton.disabled = true;
+        this.testButton.textContent = 'Connecting...';
+        this.testButton.addClass('obsius-button-connecting');
+      } else if (this.state.authenticated) {
+        this.testButton.disabled = false;
+        this.testButton.textContent = 'Connected';
+        this.testButton.removeClass('obsius-button-connecting');
+        this.testButton.addClass('obsius-button-connected');
+      } else if (!this.state.value) {
+        this.testButton.disabled = true;
+        this.testButton.textContent = 'Connection';
+        this.testButton.removeClass('obsius-button-connecting', 'obsius-button-connected');
+      } else {
+        this.testButton.disabled = false;
+        this.testButton.textContent = 'Connection';
+        this.testButton.removeClass('obsius-button-connecting', 'obsius-button-connected');
+      }
     }
   }
 

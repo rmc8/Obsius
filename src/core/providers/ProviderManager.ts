@@ -40,11 +40,11 @@ export class ProviderManager {
   /**
    * Initialize provider manager with default providers
    */
-  async initialize(): Promise<void> {
+  async initialize(existingProviderConfigs?: Record<string, SecureProviderConfig>): Promise<void> {
     if (this.initialized) return;
 
-    // Register default providers
-    await this.registerDefaultProviders();
+    // Register default providers with existing configs if available
+    await this.registerDefaultProviders(existingProviderConfigs);
     
     // Load stored API keys and verify them
     await this.loadAndVerifyStoredKeys();
@@ -56,14 +56,14 @@ export class ProviderManager {
   /**
    * Register default AI providers
    */
-  private async registerDefaultProviders(): Promise<void> {
+  private async registerDefaultProviders(existingConfigs?: Record<string, SecureProviderConfig>): Promise<void> {
     // OpenAI
     const openAIProvider = new OpenAIProvider({
       name: 'OpenAI',
       defaultModel: 'gpt-4'
     });
     
-    await this.registerProvider('openai', openAIProvider, {
+    await this.registerProvider('openai', openAIProvider, existingConfigs?.openai || {
       name: 'OpenAI',
       model: 'gpt-4',
       enabled: true,
@@ -77,7 +77,7 @@ export class ProviderManager {
       defaultModel: 'claude-3-sonnet-20240229'
     });
     
-    await this.registerProvider('anthropic', anthropicProvider, {
+    await this.registerProvider('anthropic', anthropicProvider, existingConfigs?.anthropic || {
       name: 'Anthropic Claude',
       model: 'claude-3-sonnet-20240229',
       enabled: true,
@@ -91,7 +91,7 @@ export class ProviderManager {
       defaultModel: 'gemini-pro'
     });
     
-    await this.registerProvider('google', googleProvider, {
+    await this.registerProvider('google', googleProvider, existingConfigs?.google || {
       name: 'Google AI (Gemini)',
       model: 'gemini-pro',
       enabled: true,
@@ -307,10 +307,16 @@ export class ProviderManager {
         if (metadata) {
           registration.config.keyPrefix = metadata.keyPrefix;
         }
+        
+        // Load the actual API key and set it in the provider
+        const apiKey = await this.secureStorage.getApiKey(providerId);
+        if (apiKey) {
+          registration.provider.setApiKey(apiKey);
+        }
 
-        // Optionally verify authentication (can be slow, so maybe skip for now)
-        // const authResult = await this.testProviderAuth(providerId);
-        // registration.config.authenticated = authResult.success;
+        // Trust previous authentication state for fast startup
+        // Authentication will be verified when actually needed during API calls
+        console.log(`Provider ${providerId} loaded with stored API key - trusting previous auth state`);
       }
 
       console.log(`Loaded ${storedProviders.length} stored API keys`);
