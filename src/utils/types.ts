@@ -178,18 +178,27 @@ export interface AssistantResponse {
 // ============================================================================
 
 /**
- * Plugin settings
+ * Secure provider configuration (no plaintext API keys)
+ */
+export interface SecureProviderConfig {
+  name: string;
+  baseUrl?: string;
+  model: string;
+  enabled: boolean;
+  authenticated: boolean;        // Authentication status
+  lastVerified?: string;         // ISO date string
+  hasApiKey: boolean;           // Whether API key is stored
+  keyPrefix?: string;           // Safe display prefix (e.g., "sk-ab...def")
+  models?: string[];            // Available models from provider
+}
+
+/**
+ * Plugin settings (secure version)
  */
 export interface ObsiusSettings {
-  // AI Provider settings
+  // AI Provider settings (secure)
   providers: {
-    [key: string]: {
-      name: string;
-      apiKey?: string;
-      baseUrl?: string;
-      model: string;
-      enabled: boolean;
-    };
+    [key: string]: SecureProviderConfig;
   };
   defaultProvider: string;
   
