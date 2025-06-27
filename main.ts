@@ -482,7 +482,7 @@ class ObsiusSettingTab extends PluginSettingTab {
         provider,
         placeholder: this.getPlaceholderForProvider(providerId),
         description: this.getDescriptionForProvider(providerId),
-        initialValue: config.hasApiKey ? 'stored-api-key' : '', // Placeholder for stored key
+        initialValue: config.hasApiKey && config.keyPrefix ? config.keyPrefix : '', // Show masked API key prefix
         initialAuthenticated: config.authenticated,
         initialLastVerified: config.lastVerified,
         onKeyChange: async (apiKey: string) => {

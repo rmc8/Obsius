@@ -76,10 +76,33 @@ export class ApiKeyInput {
       this.createTestButton();
     }
 
-    // Auto-validate if there's an initial value
-    if (this.state.value && this.config.autoValidate !== false) {
+    // Auto-validate only for real API keys, not placeholders or already authenticated
+    if (this.state.value && 
+        this.config.autoValidate !== false && 
+        !this.state.authenticated && 
+        !this.isPlaceholderValue(this.state.value)) {
+      console.log(`🔑 Scheduling auto-validation for ${this.config.provider.displayName}`);
       this.scheduleValidation();
+    } else if (this.state.value) {
+      const reasons = [];
+      if (this.config.autoValidate === false) reasons.push('autoValidate disabled');
+      if (this.state.authenticated) reasons.push('already authenticated');
+      if (this.isPlaceholderValue(this.state.value)) reasons.push('placeholder value');
+      console.log(`🔑 Skipping auto-validation for ${this.config.provider.displayName}: ${reasons.join(', ')}`);
     }
+  }
+
+  /**
+   * Check if the value is a placeholder rather than a real API key
+   */
+  private isPlaceholderValue(value: string): boolean {
+    const placeholders = ['stored-api-key', 'api-key-stored', '••••••••'];
+    return placeholders.includes(value) || 
+           value.startsWith('stored-') || 
+           /^•+$/.test(value) ||
+           /^sk-.{2,4}•{8,}/.test(value) || // OpenAI masked format: sk-ab••••••••••
+           /^sk-ant-.{2,4}•{8,}/.test(value) || // Anthropic masked format: sk-ant-ab••••••••••
+           /^AI.{2,4}•{8,}/.test(value); // Google masked format
   }
 
   /**
@@ -185,6 +208,12 @@ export class ApiKeyInput {
       ? this.state.value 
       : value;
 
+    // Skip processing for placeholder values
+    if (this.isPlaceholderValue(actualValue)) {
+      console.log(`🔑 Skipping auto-validation for placeholder value: ${actualValue}`);
+      return;
+    }
+
     this.state.value = actualValue;
     this.state.authenticated = false;
     this.state.error = undefined;
@@ -206,8 +235,10 @@ export class ApiKeyInput {
       return;
     }
 
-    // Schedule auto-validation
-    if (actualValue && this.config.autoValidate !== false) {
+    // Schedule auto-validation only for real API keys, not placeholders
+    if (actualValue && 
+        this.config.autoValidate !== false && 
+        !this.isPlaceholderValue(actualValue)) {
       this.scheduleValidation();
     }
   }
