@@ -365,6 +365,9 @@ export class ChatView extends ItemView {
         if (chunk.isComplete) {
           console.log('✅ Streaming complete');
         }
+      },
+      {
+        providerId: this.getCurrentProvider()  // Pass specific provider ID
       }
     );
     
@@ -380,7 +383,9 @@ export class ChatView extends ItemView {
     const thinkingLine = this.addOutput(t('cli.thinking'), 'info');
     
     // Process message with AI
-    const response = await this.agentOrchestrator!.processMessage(message, context);
+    const response = await this.agentOrchestrator!.processMessage(message, context, {
+      providerId: this.getCurrentProvider()  // Pass specific provider ID
+    });
     
     // Remove thinking indicator
     if (thinkingLine.parentNode) {

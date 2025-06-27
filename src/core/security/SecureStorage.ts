@@ -64,6 +64,8 @@ export class SecureStorage {
    */
   async storeApiKey(provider: string, apiKey: string): Promise<void> {
     try {
+      console.log(`🔐 SecureStorage.storeApiKey called for provider: ${provider}`);
+      
       // Validate inputs
       if (!provider || !apiKey) {
         throw new Error('Provider and API key are required');
@@ -73,24 +75,37 @@ export class SecureStorage {
         throw new Error('API key appears to be too short');
       }
 
+      console.log(`📝 Encrypting API key (length: ${apiKey.length})`);
+      
       // Encrypt the API key
       const encryptedData = this.encryptionService.encrypt(apiKey);
+      console.log(`✅ API key encrypted successfully`);
       
       // Load existing secure data
       const container = await this.loadSecureContainer();
+      console.log(`📦 Loaded container for storage, current providers:`, Object.keys(container.data));
       
       // Store encrypted key
       container.data[provider] = encryptedData;
       container.lastAccessed = new Date().toISOString();
+      console.log(`💾 Added ${provider} to container data`);
       
       // Save to plugin data
       await this.saveSecureContainer(container);
+      console.log(`✅ Container saved to plugin data`);
       
       // Cache the plaintext key temporarily
       this.setCachedKey(provider, apiKey);
       
-      console.log(`API key stored securely for provider: ${provider}`);
+      console.log(`✅ API key stored securely for provider: ${provider}`);
+      
+      // Verify storage immediately
+      const verifyContainer = await this.loadSecureContainer();
+      const hasProvider = provider in verifyContainer.data;
+      console.log(`🔍 Verification - ${provider} in saved data: ${hasProvider}`);
+      
     } catch (error) {
+      console.error(`❌ Failed to store API key:`, error);
       throw new Error(`Failed to store API key for ${provider}: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -280,7 +295,27 @@ export class SecureStorage {
         secureDataKeys: secureData && typeof secureData === 'object' ? Object.keys(secureData) : 'not object'
       });
       
-      if (secureData && this.isValidContainer(secureData)) {
+      // Detailed validation logging
+      if (secureData) {
+        console.log('🔍 Validating container structure:', {
+          hasVersion: 'version' in secureData,
+          versionType: typeof secureData.version,
+          versionValue: secureData.version,
+          hasCreated: 'created' in secureData,
+          createdType: typeof secureData.created,
+          hasLastAccessed: 'lastAccessed' in secureData,
+          lastAccessedType: typeof secureData.lastAccessed,
+          hasData: 'data' in secureData,
+          dataType: typeof secureData.data,
+          dataIsObject: secureData.data !== null && typeof secureData.data === 'object',
+          actualStructure: JSON.stringify(secureData, null, 2).substring(0, 500)
+        });
+      }
+      
+      const isValid = this.isValidContainer(secureData);
+      console.log(`📊 Container validation result: ${isValid ? '✅ VALID' : '❌ INVALID'}`);
+      
+      if (secureData && isValid) {
         console.log('✅ Valid container found, returning existing data');
         return secureData;
       }
@@ -298,9 +333,21 @@ export class SecureStorage {
    * Save secure data container
    */
   private async saveSecureContainer(container: SecureDataContainer): Promise<void> {
+    console.log(`💾 Saving secure container...`);
+    
     const data = await this.plugin.loadData() || {};
+    console.log(`📂 Current plugin data keys before save:`, Object.keys(data));
+    
     data[this.config.dataKey] = container;
+    console.log(`📝 Set ${this.config.dataKey} in plugin data`);
+    
     await this.plugin.saveData(data);
+    console.log(`✅ Plugin data saved`);
+    
+    // Verify save was successful
+    const verifyData = await this.plugin.loadData();
+    const hasSavedKey = verifyData && this.config.dataKey in verifyData;
+    console.log(`🔍 Verification - ${this.config.dataKey} saved: ${hasSavedKey}`);
   }
 
   /**

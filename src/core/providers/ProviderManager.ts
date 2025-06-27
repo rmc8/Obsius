@@ -508,7 +508,24 @@ export class ProviderManager {
    * Get provider by ID
    */
   getProviderById(providerId: string): BaseProvider | null {
+    console.log(`🔍 getProviderById called with: ${providerId}`);
+    
     const registration = this.providers.get(providerId);
+    console.log(`📦 Provider registration found:`, {
+      hasRegistration: !!registration,
+      config: registration?.config,
+      hasProvider: !!registration?.provider,
+      providerHasApiKey: !!(registration?.provider as any)?.apiKey
+    });
+    
+    // If provider exists but lacks API key, attempt recovery
+    if (registration && registration.config.authenticated && !(registration.provider as any)?.apiKey) {
+      console.warn(`⚠️ Provider ${providerId} authenticated but missing API key - attempting recovery`);
+      this.attemptProviderRecovery(providerId).catch(error => {
+        console.error(`Recovery failed for ${providerId}:`, error);
+      });
+    }
+    
     return registration ? registration.provider : null;
   }
 

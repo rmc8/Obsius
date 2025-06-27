@@ -21,6 +21,7 @@ export interface AgentConfig {
   temperature?: number;
   streaming?: boolean;
   tools?: string[];
+  providerId?: string;  // Specific provider to use
 }
 
 export interface ConversationContext {
@@ -191,7 +192,20 @@ export class AgentOrchestrator {
     context: ConversationContext,
     config: AgentConfig
   ): Promise<{ content: string; actions?: ObsidianAction[] }> {
-    const currentProvider = this.providerManager.getCurrentProvider();
+    console.log('🔍 AgentOrchestrator getting provider...', { 
+      usingProviderId: config.providerId || 'default' 
+    });
+    
+    // Use specific provider if provided in config, otherwise get current
+    const currentProvider = config.providerId 
+      ? this.providerManager.getProviderById(config.providerId)
+      : this.providerManager.getCurrentProvider();
+      
+    console.log('📦 Provider retrieved:', {
+      hasProvider: !!currentProvider,
+      providerId: currentProvider ? (currentProvider as any).providerId : 'null',
+      hasApiKey: currentProvider ? !!(currentProvider as any).apiKey : false
+    });
     
     if (!currentProvider) {
       // Provide detailed diagnostics
@@ -257,7 +271,20 @@ export class AgentOrchestrator {
     streamCallback: StreamCallback,
     config: AgentConfig
   ): Promise<{ content: string; actions?: ObsidianAction[] }> {
-    const currentProvider = this.providerManager.getCurrentProvider();
+    console.log('🔍 AgentOrchestrator getting provider...', { 
+      usingProviderId: config.providerId || 'default' 
+    });
+    
+    // Use specific provider if provided in config, otherwise get current
+    const currentProvider = config.providerId 
+      ? this.providerManager.getProviderById(config.providerId)
+      : this.providerManager.getCurrentProvider();
+      
+    console.log('📦 Provider retrieved:', {
+      hasProvider: !!currentProvider,
+      providerId: currentProvider ? (currentProvider as any).providerId : 'null',
+      hasApiKey: currentProvider ? !!(currentProvider as any).apiKey : false
+    });
     
     if (!currentProvider) {
       // Provide detailed diagnostics
