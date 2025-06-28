@@ -315,6 +315,51 @@ export interface EditParams {
   expected_replacements?: number;
 }
 
+/**
+ * Parameters for the project explorer tool
+ */
+export interface ProjectExplorerParams {
+  /**
+   * Directory to explore (relative to vault root, defaults to vault root)
+   */
+  directory?: string;
+
+  /**
+   * Maximum number of items to process (50-1000, default: 200)
+   */
+  maxItems?: number;
+
+  /**
+   * Whether to include file content preview (increases output size)
+   */
+  includeFileContent?: boolean;
+
+  /**
+   * File extensions to focus on (e.g., ["md", "ts", "js"])
+   */
+  fileTypes?: string[];
+
+  /**
+   * Whether to respect .gitignore patterns
+   */
+  respectGitIgnore?: boolean;
+
+  /**
+   * Maximum directory depth to explore (1-10, default: 5)
+   */
+  maxDepth?: number;
+
+  /**
+   * Maximum number of directories to scan (10-500, helps with performance on large projects)
+   */
+  maxDirs?: number;
+
+  /**
+   * Whether to include content sampling from key project files for enhanced analysis
+   */
+  includeKeyFiles?: boolean;
+}
+
 // ============================================================================
 // MCP (Model Context Protocol) Types
 // ============================================================================

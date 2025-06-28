@@ -19,7 +19,8 @@ import {
   WebFetchTool,
   ReadManyFilesTool,
   EditTool,
-  OpenNoteTool
+  OpenNoteTool,
+  ProjectExplorerTool
 } from './src/tools';
 import { ExecutionContext, ObsiusSettings, SecureProviderConfig } from './src/utils/types';
 import { ProviderManager } from './src/core/providers/ProviderManager';
@@ -57,10 +58,10 @@ const DEFAULT_SETTINGS: ObsiusSettings = {
   },
   defaultProvider: 'openai',
   tools: {
-    enabled: ['create_note', 'read_note', 'search_notes', 'update_note', 'glob', 'list_directory', 'grep', 'shell', 'web_fetch', 'read_many_files', 'edit', 'open_note'],
+    enabled: ['create_note', 'read_note', 'search_notes', 'update_note', 'glob', 'list_directory', 'grep', 'shell', 'web_fetch', 'read_many_files', 'edit', 'open_note', 'project_explorer'],
     confirmationRequired: ['update_note'],
     riskLevels: {
-      low: ['create_note', 'read_note', 'search_notes', 'glob', 'list_directory', 'grep', 'web_fetch', 'read_many_files', 'open_note'],
+      low: ['create_note', 'read_note', 'search_notes', 'glob', 'list_directory', 'grep', 'web_fetch', 'read_many_files', 'open_note', 'project_explorer'],
       medium: ['update_note', 'shell', 'edit'],
       high: []
     }
@@ -117,6 +118,9 @@ export default class ObsiusPlugin extends Plugin {
 
     // Load settings first
     await this.loadSettings();
+    
+    // Validate and auto-correct settings
+    await this.validateAndCorrectSettings();
 
     // Initialize i18n system with separated languages
     initializeI18n(this.settings.ui.interfaceLanguage, this.settings.ui.chatLanguage);
@@ -251,6 +255,54 @@ export default class ObsiusPlugin extends Plugin {
     this.chatView = null;
     
     console.log('✅ Obsius AI Agent plugin unloaded');
+  }
+
+  /**
+   * Validate and auto-correct plugin settings
+   */
+  private async validateAndCorrectSettings(): Promise<void> {
+    console.log('🔧 Validating plugin settings...');
+    
+    let settingsChanged = false;
+    const criticalTools = ['project_explorer'];
+    
+    // Ensure critical tools are enabled
+    for (const toolName of criticalTools) {
+      if (!this.settings.tools.enabled.includes(toolName)) {
+        console.log(`📋 Auto-enabling critical tool: ${toolName}`);
+        this.settings.tools.enabled.push(toolName);
+        settingsChanged = true;
+      }
+    }
+    
+    // Ensure project_explorer is in the correct risk level
+    if (!this.settings.tools.riskLevels.low.includes('project_explorer')) {
+      console.log('📋 Auto-correcting project_explorer risk level to low');
+      this.settings.tools.riskLevels.low.push('project_explorer');
+      settingsChanged = true;
+    }
+    
+    // Remove duplicates
+    this.settings.tools.enabled = [...new Set(this.settings.tools.enabled)];
+    this.settings.tools.riskLevels.low = [...new Set(this.settings.tools.riskLevels.low)];
+    this.settings.tools.riskLevels.medium = [...new Set(this.settings.tools.riskLevels.medium)];
+    this.settings.tools.riskLevels.high = [...new Set(this.settings.tools.riskLevels.high)];
+    
+    // Validate MCP settings for current environment
+    if (this.settings.mcp.enabled && !isMCPSupported()) {
+      console.log('🔄 Auto-disabling MCP due to environment limitations');
+      this.settings.mcp.enabled = false;
+      settingsChanged = true;
+    }
+    
+    // Save settings if changes were made
+    if (settingsChanged) {
+      console.log('💾 Saving corrected settings...');
+      await this.saveSettings();
+      console.log('✅ Settings validation completed with corrections');
+    } else {
+      console.log('✅ Settings validation completed - no corrections needed');
+    }
   }
 
   /**
@@ -575,8 +627,12 @@ export default class ObsiusPlugin extends Plugin {
    * Initialize the tool registry with basic Obsidian tools
    */
   private initializeToolRegistry(): void {
+    console.log('🔧 Initializing tool registry...');
+    
     const context = this.createExecutionContext();
     this.toolRegistry = new ToolRegistry(this.app, context);
+    
+    console.log('📋 Tool registry created, registering tools...');
 
     // Register basic Obsidian tools
     this.toolRegistry.registerTool('create_note', CreateNoteTool, {
@@ -663,7 +719,30 @@ export default class ObsiusPlugin extends Plugin {
       enabled: this.settings.tools.enabled.includes('open_note')
     });
 
-    console.log('Tool registry initialized with', this.toolRegistry.getStats());
+    // Register ProjectExplorerTool with enhanced debugging
+    console.log('🔍 Registering ProjectExplorerTool...');
+    const projectExplorerEnabled = this.settings.tools.enabled.includes('project_explorer');
+    console.log(`   - Enabled in settings: ${projectExplorerEnabled}`);
+    
+    this.toolRegistry.registerTool('project_explorer', ProjectExplorerTool, {
+      description: 'Comprehensively explore and analyze project structure with file discovery, content preview, and structured output for AI analysis',
+      riskLevel: 'low',
+      category: 'project_analysis',
+      enabled: projectExplorerEnabled
+    });
+    
+    // Verify registration
+    const projectExplorerTool = this.toolRegistry.getTool('project_explorer');
+    const projectExplorerMetadata = this.toolRegistry.getToolMetadata('project_explorer');
+    console.log(`   - Tool instance created: ${!!projectExplorerTool}`);
+    console.log(`   - Tool metadata: ${!!projectExplorerMetadata}`);
+    if (projectExplorerMetadata) {
+      console.log(`   - Metadata enabled: ${projectExplorerMetadata.enabled}`);
+    }
+
+    const stats = this.toolRegistry.getStats();
+    console.log('✅ Tool registry initialized with', stats);
+    console.log(`   - Total tools: ${stats.total}, Enabled: ${stats.enabled}, Disabled: ${stats.disabled}`);
   }
 
   /**
