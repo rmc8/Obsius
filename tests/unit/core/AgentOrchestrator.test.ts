@@ -60,7 +60,32 @@ describe('AgentOrchestrator', () => {
     mockProviderManager.addProvider('test-provider', mockProvider);
     mockProviderManager.setCurrentProvider('test-provider');
     
-    orchestrator = new AgentOrchestrator(mockApp, mockProviderManager as any, mockToolRegistry);
+    orchestrator = new AgentOrchestrator(mockApp, mockProviderManager as any, mockToolRegistry, {
+      providers: {},
+      defaultProvider: 'openai',
+      tools: {
+        enabled: [],
+        confirmationRequired: [],
+        riskLevels: { low: [], medium: [], high: [] }
+      },
+      ui: {
+        language: 'en',
+        showTimestamps: true,
+        enableStreaming: false,
+        autoScroll: true
+      },
+      sessions: {
+        maxHistorySize: 100,
+        autoSave: true,
+        persistAcrossReloads: true
+      },
+      workflow: {
+        maxIterations: 24,
+        enableReACT: true,
+        enableStateGraph: true,
+        iterationTimeout: 30
+      }
+    });
     
     // Mock console methods
     jest.spyOn(console, 'log').mockImplementation(() => {});

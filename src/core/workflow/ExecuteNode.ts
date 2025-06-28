@@ -404,17 +404,26 @@ export class ExecuteNode extends BaseNode {
    * Execute a single action using actual tools
    */
   private async executeAction(action: PlannedAction, context: NodeExecutionContext): Promise<ToolResult> {
-    // This is just a placeholder - the actual tool execution should be handled by AgentOrchestrator
-    // For now, return a result indicating the action needs to be executed
-    return {
-      success: false,
-      message: `Action ${action.type} needs to be executed by AgentOrchestrator`,
-      data: {
-        action: action.type,
-        parameters: action.parameters,
-        needsExecution: true
-      }
-    };
+    // Check if toolExecutor is available in context
+    if (!context.toolExecutor) {
+      return {
+        success: false,
+        message: `Tool executor not available in context`,
+        error: 'Tool executor not configured'
+      };
+    }
+
+    try {
+      // Execute the action using the tool executor from context
+      const result = await context.toolExecutor(action.type, action.parameters);
+      return result;
+    } catch (error) {
+      return {
+        success: false,
+        message: `Tool execution failed for ${action.type}`,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
   }
 
   /**

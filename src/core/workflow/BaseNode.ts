@@ -5,6 +5,7 @@
 
 import { WorkflowState, WorkflowStateManager, WorkflowPhase, NodeStatus } from '../WorkflowState';
 import { WORKFLOW_CONSTANTS } from '../../utils/constants';
+import { ToolResult } from '../../utils/types';
 
 /**
  * Node execution context
@@ -15,6 +16,7 @@ export interface NodeExecutionContext {
   startTime: Date;
   timeout: number;
   logger?: (message: string) => void;
+  toolExecutor?: (toolName: string, parameters: any) => Promise<ToolResult>;
 }
 
 /**

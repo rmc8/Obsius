@@ -3,7 +3,7 @@
  * This class bridges the chat interface, AI providers, and Obsidian tools
  */
 
-import { App } from 'obsidian';
+import { App, TFile } from 'obsidian';
 import { ProviderManager } from './providers/ProviderManager';
 import { ToolRegistry } from '../tools/ToolRegistry';
 import { 
@@ -11,7 +11,10 @@ import {
   ObsidianAction, 
   AssistantResponse, 
   ExecutionContext,
-  ToolResult 
+  ToolResult,
+  ObsiusSettings,
+  SessionStats,
+  TokenUsage 
 } from '../utils/types';
 import { AIMessage, StreamCallback, StreamChunk } from './providers/BaseProvider';
 import { t, getCurrentLanguage, buildLocalizedSystemPrompt } from '../utils/i18n';
@@ -46,22 +49,6 @@ export interface ConversationContext {
   userId?: string;
 }
 
-export interface TokenUsage {
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
-}
-
-export interface SessionStats {
-  totalTokens: number;
-  totalCost: number;
-  providerStats: Record<string, {
-    tokens: number;
-    cost: number;
-    requests: number;
-  }>;
-  requestCount: number;
-}
 
 /**
  * Main orchestrator for AI agent interactions
@@ -70,6 +57,7 @@ export class AgentOrchestrator {
   private app: App;
   private providerManager: ProviderManager;
   private toolRegistry: ToolRegistry;
+  private settings: ObsiusSettings;
   private conversationHistory: ChatMessage[] = [];
   private sessionStats: SessionStats = {
     totalTokens: 0,
@@ -87,11 +75,13 @@ export class AgentOrchestrator {
   constructor(
     app: App,
     providerManager: ProviderManager,
-    toolRegistry: ToolRegistry
+    toolRegistry: ToolRegistry,
+    settings: ObsiusSettings
   ) {
     this.app = app;
     this.providerManager = providerManager;
     this.toolRegistry = toolRegistry;
+    this.settings = settings;
     
     // Initialize workflow persistence
     this.workflowPersistence = new WorkflowPersistence(app, {
@@ -124,8 +114,19 @@ export class AgentOrchestrator {
       this.conversationHistory.push(userMessage);
       context.messages = [...this.conversationHistory];
 
-      // Use StateGraph workflow instead of simple ReACT loop
-      const workflowResult = await this.executeStateGraphWorkflow(userInput, context, config);
+      // Choose execution method based on settings
+      let workflowResult: AssistantResponse;
+      
+      if (this.settings.workflow.enableStateGraph) {
+        // Use StateGraph workflow
+        workflowResult = await this.executeStateGraphWorkflow(userInput, context, config);
+      } else if (this.settings.workflow.enableReACT) {
+        // Use ReACT methodology without StateGraph
+        workflowResult = await this.executeReACTLoop(userInput, context, config);
+      } else {
+        // Simple direct execution without workflows
+        workflowResult = await this.executeDirectResponse(userInput, context, config);
+      }
       
       return workflowResult;
 
@@ -223,8 +224,26 @@ export class AgentOrchestrator {
           state: workflowState,
           stateManager,
           startTime: new Date(),
-          timeout: WORKFLOW_CONSTANTS.ITERATION_TIMEOUT_MS,
-          logger: (message: string) => console.log(`[StateGraph] ${message}`)
+          timeout: this.settings.workflow.iterationTimeout * 1000, // Convert seconds to milliseconds
+          logger: (message: string) => console.log(`[StateGraph] ${message}`),
+          toolExecutor: async (toolName: string, parameters: any) => {
+            // Convert currentFile path to TFile if needed
+            let currentFile: TFile | undefined;
+            if (context.currentFile) {
+              const file = this.app.vault.getAbstractFileByPath(context.currentFile);
+              if (file instanceof TFile) {
+                currentFile = file;
+              }
+            }
+            
+            const executionContext: ExecutionContext = {
+              app: this.app,
+              vaultPath: (this.app.vault.adapter as any).basePath || this.app.vault.getName(),
+              currentFile,
+              workspaceState: context.workspaceState
+            };
+            return await this.executeToolForWorkflow(toolName, parameters, executionContext);
+          }
         };
 
         // Determine current node based on phase and routing logic
@@ -443,7 +462,7 @@ export class AgentOrchestrator {
       userInput,
       vaultName,
       {
-        maxIterations: config.maxIterations || WORKFLOW_CONSTANTS.MAX_ITERATIONS,
+        maxIterations: config.maxIterations || this.settings.workflow.maxIterations,
         enablePersistence: true,
         verboseLogging: false,
         autoCheckpoint: true
@@ -643,6 +662,119 @@ export class AgentOrchestrator {
     }
     
     return summary;
+  }
+
+  /**
+   * Execute tool for workflow nodes
+   * Public method to allow workflow nodes to execute tools
+   */
+  public async executeToolForWorkflow(
+    toolName: string,
+    parameters: any,
+    context: ExecutionContext
+  ): Promise<ToolResult> {
+    try {
+      const result = await this.toolRegistry.executeTool(
+        toolName,
+        parameters,
+        {
+          context: context
+        }
+      );
+
+      return result;
+    } catch (error) {
+      console.error(`Tool execution error for ${toolName}:`, error);
+      return {
+        success: false,
+        message: `Tool execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  /**
+   * Execute a single tool
+   */
+  private async executeTool(
+    action: ObsidianAction,
+    context: ConversationContext
+  ): Promise<ToolResult> {
+    try {
+      // Convert currentFile path to TFile if needed
+      let currentFile: TFile | undefined;
+      if (context.currentFile) {
+        const file = this.app.vault.getAbstractFileByPath(context.currentFile);
+        if (file instanceof TFile) {
+          currentFile = file;
+        }
+      }
+      
+      const executionContext: ExecutionContext = {
+        app: this.app,
+        vaultPath: (this.app.vault.adapter as any).basePath || this.app.vault.getName(),
+        currentFile,
+        workspaceState: context.workspaceState
+      };
+      
+      return await this.toolRegistry.executeTool(
+        action.type,
+        action.parameters,
+        {
+          context: executionContext
+        }
+      );
+    } catch (error) {
+      console.error(`Tool execution error for ${action.type}:`, error);
+      return {
+        success: false,
+        message: `Tool execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  /**
+   * Execute direct response without workflow (simple mode)
+   */
+  private async executeDirectResponse(
+    userInput: string,
+    context: ConversationContext,
+    config: AgentConfig
+  ): Promise<AssistantResponse> {
+    try {
+      // Generate AI response
+      const aiResponse = await this.generateAIResponse(userInput, context, config);
+      
+      const assistantMessage: ChatMessage = {
+        id: this.generateMessageId(),
+        timestamp: new Date(),
+        type: 'assistant',
+        content: aiResponse.content
+      };
+      
+      this.conversationHistory.push(assistantMessage);
+      
+      // Execute any tool calls
+      const executedActions: ObsidianAction[] = [];
+      if (aiResponse.actions && aiResponse.actions.length > 0) {
+        for (const action of aiResponse.actions) {
+          const result = await this.executeTool(action, context);
+          executedActions.push({
+            ...action,
+            result
+          });
+        }
+      }
+      
+      return {
+        message: assistantMessage,
+        actions: executedActions
+      };
+    } catch (error) {
+      console.error('Direct response error:', error);
+      throw error;
+    }
   }
 
   /**

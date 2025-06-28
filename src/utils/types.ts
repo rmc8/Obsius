@@ -254,6 +254,41 @@ export interface ObsiusSettings {
     autoSave: boolean;
     persistAcrossReloads: boolean;
   };
+  
+  // Workflow settings
+  workflow: {
+    maxIterations: number;        // Maximum iterations for ReACT/StateGraph (1-100)
+    enableReACT: boolean;         // Enable ReACT reasoning methodology
+    enableStateGraph: boolean;    // Enable LangGraph-style workflow
+    iterationTimeout: number;     // Timeout per iteration in seconds (10-300)
+  };
+}
+
+// ============================================================================
+// Session and Usage Types
+// ============================================================================
+
+/**
+ * Token usage information from AI providers
+ */
+export interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+/**
+ * Session statistics for tracking AI usage
+ */
+export interface SessionStats {
+  totalTokens: number;
+  totalCost: number;
+  providerStats: Record<string, {
+    tokens: number;
+    cost: number;
+    requests: number;
+  }>;
+  requestCount: number;
 }
 
 // ============================================================================

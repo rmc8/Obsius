@@ -66,6 +66,12 @@ const DEFAULT_SETTINGS: ObsiusSettings = {
     maxHistorySize: 100,
     autoSave: true,
     persistAcrossReloads: true
+  },
+  workflow: {
+    maxIterations: 24,
+    enableReACT: true,
+    enableStateGraph: true,
+    iterationTimeout: 30
   }
 };
 
@@ -1070,6 +1076,9 @@ class ObsiusSettingTab extends PluginSettingTab {
 
     // UI Settings
     this.createUISettings(containerEl);
+
+    // Workflow Settings
+    this.createWorkflowSettings(containerEl);
   }
 
   /**
@@ -1387,6 +1396,86 @@ class ObsiusSettingTab extends PluginSettingTab {
       default:
         return 'Enter API key...';
     }
+  }
+
+  /**
+   * Create workflow settings section
+   */
+  private createWorkflowSettings(containerEl: HTMLElement): void {
+    containerEl.createEl('h3', { text: 'Workflow Settings' });
+
+    // Max iterations setting with slider
+    new Setting(containerEl)
+      .setName('Maximum Iterations')
+      .setDesc('Maximum number of reasoning iterations (1-100). Lower values complete tasks faster but may miss complex solutions. Higher values allow deeper exploration but take more time.')
+      .addSlider(slider => {
+        slider
+          .setLimits(1, 100, 1)
+          .setValue(this.plugin.settings.workflow.maxIterations)
+          .setDynamicTooltip()
+          .onChange(async (value) => {
+            this.plugin.settings.workflow.maxIterations = value;
+            await this.plugin.saveSettings();
+          });
+      })
+      .addExtraButton(button => {
+        button
+          .setIcon('reset')
+          .setTooltip('Reset to default (24)')
+          .onClick(async () => {
+            this.plugin.settings.workflow.maxIterations = 24;
+            await this.plugin.saveSettings();
+            this.display(); // Refresh the settings display
+          });
+      });
+
+    // Enable ReACT toggle
+    new Setting(containerEl)
+      .setName('Enable ReACT Methodology')
+      .setDesc('Use Reasoning + Acting cycles for systematic problem-solving')
+      .addToggle(toggle => {
+        toggle
+          .setValue(this.plugin.settings.workflow.enableReACT)
+          .onChange(async (value) => {
+            this.plugin.settings.workflow.enableReACT = value;
+            await this.plugin.saveSettings();
+          });
+      });
+
+    // Enable StateGraph toggle
+    new Setting(containerEl)
+      .setName('Enable StateGraph Workflow')
+      .setDesc('Use LangGraph-style multi-node processing for complex tasks')
+      .addToggle(toggle => {
+        toggle
+          .setValue(this.plugin.settings.workflow.enableStateGraph)
+          .onChange(async (value) => {
+            this.plugin.settings.workflow.enableStateGraph = value;
+            await this.plugin.saveSettings();
+          });
+      });
+
+    // Iteration timeout setting
+    new Setting(containerEl)
+      .setName('Iteration Timeout (seconds)')
+      .setDesc('Maximum time allowed per iteration (10-300 seconds)')
+      .addSlider(slider => {
+        slider
+          .setLimits(10, 300, 5)
+          .setValue(this.plugin.settings.workflow.iterationTimeout)
+          .setDynamicTooltip()
+          .onChange(async (value) => {
+            this.plugin.settings.workflow.iterationTimeout = value;
+            await this.plugin.saveSettings();
+          });
+      });
+
+    // Add help text
+    const helpDiv = containerEl.createDiv('obsius-workflow-help');
+    helpDiv.createEl('p', { 
+      text: '💡 Tip: For simple tasks like creating notes or searching, use 5-10 iterations. For complex analysis or multi-step operations, use 20-50 iterations.',
+      cls: 'setting-item-description'
+    });
   }
 
   /**
