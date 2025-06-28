@@ -13,7 +13,8 @@ import {
   SearchNotesTool, 
   UpdateNoteTool,
   GlobTool,
-  ListDirectoryTool
+  ListDirectoryTool,
+  GrepTool
 } from './src/tools';
 import { ExecutionContext, ObsiusSettings, SecureProviderConfig } from './src/utils/types';
 import { ProviderManager } from './src/core/providers/ProviderManager';
@@ -50,10 +51,10 @@ const DEFAULT_SETTINGS: ObsiusSettings = {
   },
   defaultProvider: 'openai',
   tools: {
-    enabled: ['create_note', 'read_note', 'search_notes', 'update_note', 'glob', 'list_directory'],
+    enabled: ['create_note', 'read_note', 'search_notes', 'update_note', 'glob', 'list_directory', 'grep'],
     confirmationRequired: ['update_note'],
     riskLevels: {
-      low: ['create_note', 'read_note', 'search_notes', 'glob', 'list_directory'],
+      low: ['create_note', 'read_note', 'search_notes', 'glob', 'list_directory', 'grep'],
       medium: ['update_note'],
       high: []
     }
@@ -594,6 +595,13 @@ export default class ObsiusPlugin extends Plugin {
       riskLevel: 'low', 
       category: 'file_system',
       enabled: this.settings.tools.enabled.includes('list_directory')
+    });
+
+    this.toolRegistry.registerTool('grep', GrepTool, {
+      description: 'Search for regular expression patterns within file contents',
+      riskLevel: 'low',
+      category: 'content_search',
+      enabled: this.settings.tools.enabled.includes('grep')
     });
 
     console.log('Tool registry initialized with', this.toolRegistry.getStats());

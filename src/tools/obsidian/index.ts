@@ -9,6 +9,7 @@ export { SearchNotesTool } from './SearchNotesTool';
 export { UpdateNoteTool } from './UpdateNoteTool';
 export { GlobTool } from './GlobTool';
 export { ListDirectoryTool } from './ListDirectoryTool';
+export { GrepTool } from './GrepTool';
 
 // Re-export types for convenience
 export type {
@@ -18,7 +19,9 @@ export type {
   UpdateNoteParams,
   GlobParams,
   ListDirectoryParams,
+  GrepParams,
   FileEntry,
+  GrepMatch,
   SearchResult,
   SearchMatch
 } from '../../utils/types';

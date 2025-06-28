@@ -191,6 +191,46 @@ export interface FileEntry {
 }
 
 /**
+ * Parameters for the grep tool
+ */
+export interface GrepParams {
+  /**
+   * The regular expression pattern to search for in file contents
+   */
+  pattern: string;
+
+  /**
+   * The directory to search in (optional, defaults to vault root)
+   */
+  path?: string;
+
+  /**
+   * File pattern to include in the search (e.g. "*.js", "*.{ts,tsx}")
+   */
+  include?: string;
+}
+
+/**
+ * Result object for a single grep match
+ */
+export interface GrepMatch {
+  /**
+   * Relative file path from search directory
+   */
+  filePath: string;
+
+  /**
+   * Line number where match was found (1-based)
+   */
+  lineNumber: number;
+
+  /**
+   * Content of the line containing the match
+   */
+  line: string;
+}
+
+/**
  * Search result item
  */
 export interface SearchResult {

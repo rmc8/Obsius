@@ -15,7 +15,8 @@ export {
   SearchNotesTool,
   UpdateNoteTool,
   GlobTool,
-  ListDirectoryTool
+  ListDirectoryTool,
+  GrepTool
 } from './obsidian';
 
 // Re-export types
@@ -26,7 +27,9 @@ export type {
   UpdateNoteParams,
   GlobParams,
   ListDirectoryParams,
+  GrepParams,
   FileEntry,
+  GrepMatch,
   SearchResult,
   SearchMatch
 } from '../utils/types';
