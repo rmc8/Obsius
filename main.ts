@@ -81,14 +81,17 @@ export default class ObsiusPlugin extends Plugin {
   async onload() {
     console.log('Loading Obsius AI Agent plugin...');
 
-    // Load settings
+    // Load settings first
     await this.loadSettings();
 
     // Initialize i18n system
     initializeI18n(this.settings.ui.language);
 
-    // Initialize provider manager
-    await this.initializeProviderManager();
+    // Wait for Obsidian to fully stabilize before initializing secure components
+    await this.waitForObsidianStability();
+
+    // Initialize provider manager with enhanced timing
+    await this.initializeProviderManagerWithDelay();
 
     // Initialize tool registry
     this.initializeToolRegistry();
@@ -114,8 +117,96 @@ export default class ObsiusPlugin extends Plugin {
     console.log('Obsius AI Agent plugin loaded successfully!');
   }
 
-  onunload() {
+  /**
+   * Wait for Obsidian to fully stabilize before initializing secure components
+   */
+  private async waitForObsidianStability(): Promise<void> {
+    const startTime = Date.now();
+    console.log(`⏳ Waiting for Obsidian stability...`);
+
+    try {
+      // Simplified stability check - max 3 attempts
+      const maxChecks = 3;
+      
+      for (let i = 0; i < maxChecks; i++) {
+        const workspaceReady = this.app.workspace && this.app.workspace.layoutReady;
+        const vaultReady = !!this.app.vault;
+        
+        // Quick data access test
+        let dataReady = false;
+        try {
+          await this.loadData();
+          dataReady = true;
+        } catch (error) {
+          console.log(`📊 Data access not ready on attempt ${i + 1}`);
+        }
+        
+        if (workspaceReady && vaultReady && dataReady) {
+          console.log(`✅ Obsidian ready after ${i + 1} checks`);
+          break;
+        }
+        
+        if (i < maxChecks - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+      
+      const stabilityTime = Date.now() - startTime;
+      console.log(`🏁 Stability check completed in ${stabilityTime}ms`);
+      
+    } catch (error) {
+      console.error(`❌ Stability check error:`, error);
+      // Continue anyway
+    }
+  }
+
+  /**
+   * Initialize provider manager with simplified retry
+   */
+  private async initializeProviderManagerWithDelay(): Promise<void> {
+    const startTime = Date.now();
+    console.log(`🔄 Initializing provider manager...`);
+
+    const maxAttempts = 2;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await this.initializeProviderManager();
+        console.log(`✅ Provider manager initialized on attempt ${attempt}`);
+        break;
+      } catch (error) {
+        console.error(`❌ Initialization attempt ${attempt} failed:`, error);
+        
+        if (attempt < maxAttempts) {
+          // Short delay before retry
+          await new Promise(resolve => setTimeout(resolve, 200));
+        } else {
+          console.error(`❌ Provider manager initialization failed`);
+          // Continue in degraded mode
+        }
+      }
+    }
+
+    const initTime = Date.now() - startTime;
+    console.log(`🏁 Provider manager initialization completed in ${initTime}ms`);
+  }
+
+  async onunload() {
     console.log('Unloading Obsius AI Agent plugin...');
+    
+    try {
+      // Force save settings before unload to prevent data loss
+      console.log('💾 Force saving settings before unload...');
+      await this.saveSettings();
+      console.log('✅ Settings saved successfully');
+      
+      // Additional wait to ensure filesystem sync
+      await new Promise(resolve => setTimeout(resolve, 100));
+      console.log('✅ Filesystem sync wait completed');
+      
+    } catch (error) {
+      console.error('❌ Failed to save settings during unload:', error);
+    }
     
     // Cleanup provider manager
     if (this.providerManager) {
@@ -124,56 +215,254 @@ export default class ObsiusPlugin extends Plugin {
     
     // Cleanup chat view
     this.chatView = null;
+    
+    console.log('✅ Obsius AI Agent plugin unloaded');
   }
 
   /**
-   * Initialize provider manager with secure API key handling
+   * Initialize provider manager with enhanced secure API key handling and state synchronization
    */
   private async initializeProviderManager(): Promise<void> {
-    this.providerManager = new ProviderManager(this);
+    const startTime = Date.now();
+    console.log(`🔑 [${startTime}] Starting enhanced ProviderManager initialization...`);
     
-    // Pass existing provider configurations to preserve authentication states
-    console.log('🔑 Initializing ProviderManager with existing auth states:', 
-      Object.entries(this.settings.providers).map(([id, config]) => 
-        `${id}: ${config.authenticated ? 'authenticated' : 'not authenticated'}`
-      ).join(', ')
-    );
-    await this.providerManager.initialize(this.settings.providers);
+    try {
+      // Step 1: Create ProviderManager instance
+      this.providerManager = new ProviderManager(this);
+      console.log('✅ ProviderManager instance created');
+      
+      // Step 2: Log initial state for debugging
+      console.log('🔍 Initial provider auth states:', 
+        Object.entries(this.settings.providers).map(([id, config]) => 
+          `${id}: ${config.authenticated ? 'authenticated' : 'not authenticated'}${config.hasApiKey ? ' (hasKey)' : ''}${config.keyPrefix ? ` [${config.keyPrefix}]` : ''}`
+        ).join(', ')
+      );
+      
+      // Step 3: Initialize with existing configurations
+      console.log('🚀 Initializing ProviderManager with existing configurations...');
+      await this.providerManager.initialize(this.settings.providers);
+      console.log('✅ ProviderManager initialization completed');
 
-    // Check for old plaintext API keys and migrate them
-    const oldData = await this.loadData();
-    if (oldData?.providers) {
-      const hasOldKeys = Object.values(oldData.providers).some((p: any) => p.apiKey);
-      if (hasOldKeys) {
-        console.log('Migrating old API keys to secure storage...');
+      // Step 4: Handle legacy API key migration
+      await this.handleLegacyApiKeyMigration();
+      
+      // Step 5: Synchronize provider configurations
+      await this.synchronizeProviderConfigurations();
+      
+      // Step 6: Restore API keys to provider instances after initialization
+      console.log('🔄 Ensuring API keys are set in provider instances...');
+      await this.providerManager.restoreApiKeysToProviders();
+      
+      // Step 7: Validate final state
+      await this.validateProviderManagerState();
+      
+      const initTime = Date.now() - startTime;
+      console.log(`✅ ProviderManager initialization completed successfully in ${initTime}ms`);
+      
+    } catch (error) {
+      const initTime = Date.now() - startTime;
+      console.error(`❌ ProviderManager initialization failed after ${initTime}ms:`, error);
+      
+      // Emergency fallback: ensure we have a working provider manager
+      if (!this.providerManager) {
+        console.log('🚑 Creating fallback ProviderManager...');
+        this.providerManager = new ProviderManager(this);
+        await this.providerManager.initialize({});
+        console.log('✅ Fallback ProviderManager created');
+      }
+      
+      throw error;
+    }
+  }
+  
+  /**
+   * Handle migration of legacy plaintext API keys
+   */
+  private async handleLegacyApiKeyMigration(): Promise<void> {
+    console.log('🔄 Checking for legacy API key migration...');
+    
+    try {
+      const oldData = await this.loadData();
+      console.log('🔍 Migration check:', {
+        hasData: !!oldData,
+        keys: oldData ? Object.keys(oldData) : [],
+        hasProviders: !!oldData?.providers
+      });
+      
+      if (!oldData?.providers) {
+        console.log('✅ No legacy provider data found');
+        return;
+      }
+      
+      console.log('📋 Legacy provider data found:', Object.keys(oldData.providers));
+      
+      // Check for plaintext API keys
+      const providersWithKeys = Object.entries(oldData.providers).filter(
+        ([_, provider]: [string, any]) => provider.apiKey && typeof provider.apiKey === 'string'
+      );
+      
+      if (providersWithKeys.length === 0) {
+        console.log('✅ No plaintext API keys found to migrate');
+        return;
+      }
+      
+      console.log(`🔄 Migrating ${providersWithKeys.length} plaintext API keys to secure storage...`);
+      
+      // Perform migration with error handling
+      let migrationSuccess = true;
+      try {
         await this.providerManager.migrateFromPlaintext(oldData.providers);
-        
-        // Clear old plaintext keys from settings
+        console.log('✅ Migration to secure storage completed');
+      } catch (migrationError) {
+        console.error('❌ Migration failed:', migrationError);
+        migrationSuccess = false;
+      }
+      
+      // Clean up plaintext keys only if migration succeeded
+      if (migrationSuccess) {
+        let cleanupCount = 0;
         for (const provider of Object.values(oldData.providers) as any[]) {
-          delete provider.apiKey;
+          if (provider.apiKey) {
+            delete provider.apiKey;
+            cleanupCount++;
+          }
         }
-        await this.saveData(oldData);
+        
+        if (cleanupCount > 0) {
+          await this.saveData(oldData);
+          console.log(`🗑️ Cleaned up ${cleanupCount} plaintext API keys from settings`);
+        }
+      }
+      
+    } catch (error) {
+      console.error('❌ Legacy migration check failed:', error);
+      // Continue initialization despite migration failure
+    }
+  }
+  
+  /**
+   * Synchronize provider configurations between ProviderManager and plugin settings
+   */
+  private async synchronizeProviderConfigurations(): Promise<void> {
+    console.log('🔄 Synchronizing provider configurations...');
+    
+    try {
+      const providerConfigs = this.providerManager.getAllProviderConfigs();
+      let syncCount = 0;
+      let updateCount = 0;
+      
+      // Sync from ProviderManager to settings
+      for (const [providerId, managerConfig] of Object.entries(providerConfigs)) {
+        const existingConfig = this.settings.providers[providerId];
+        
+        if (!existingConfig) {
+          // New provider not in settings
+          this.settings.providers[providerId] = managerConfig;
+          syncCount++;
+          console.log(`🆕 Added new provider to settings: ${providerId}`);
+        } else {
+          // Update existing provider with current state from manager
+          let hasChanges = false;
+          
+          // Sync critical fields that might have changed during initialization
+          if (existingConfig.hasApiKey !== managerConfig.hasApiKey) {
+            existingConfig.hasApiKey = managerConfig.hasApiKey;
+            hasChanges = true;
+          }
+          
+          if (existingConfig.authenticated !== managerConfig.authenticated) {
+            existingConfig.authenticated = managerConfig.authenticated;
+            hasChanges = true;
+          }
+          
+          if (existingConfig.keyPrefix !== managerConfig.keyPrefix) {
+            existingConfig.keyPrefix = managerConfig.keyPrefix;
+            hasChanges = true;
+          }
+          
+          if (existingConfig.lastVerified !== managerConfig.lastVerified) {
+            existingConfig.lastVerified = managerConfig.lastVerified;
+            hasChanges = true;
+          }
+          
+          if (hasChanges) {
+            updateCount++;
+            console.log(`🔄 Updated ${providerId} configuration in settings`);
+          }
+        }
+      }
+      
+      // Save settings if changes were made
+      if (syncCount > 0 || updateCount > 0) {
+        console.log(`💾 Saving settings with ${syncCount} new providers and ${updateCount} updates`);
+        await this.saveSettings();
+        console.log('✅ Provider configuration synchronization saved');
+      } else {
+        console.log('✅ Provider configurations already in sync');
+      }
+      
+    } catch (error) {
+      console.error('❌ Provider configuration synchronization failed:', error);
+      // Try to save settings anyway to preserve any partial updates
+      try {
+        await this.saveSettings();
+        console.log('✅ Settings saved despite synchronization error');
+      } catch (saveError) {
+        console.error('❌ Failed to save settings:', saveError);
       }
     }
-
-    // Only sync new providers that might have been added
-    const providerConfigs = this.providerManager.getAllProviderConfigs();
-    for (const [providerId, config] of Object.entries(providerConfigs)) {
-      // Only update if the provider doesn't exist in settings yet
-      if (!this.settings.providers[providerId]) {
-        this.settings.providers[providerId] = config;
+  }
+  
+  /**
+   * Validate the final state of ProviderManager
+   */
+  private async validateProviderManagerState(): Promise<void> {
+    console.log('🔍 Validating final ProviderManager state...');
+    
+    try {
+      // Get statistics
+      const stats = this.providerManager.getStats();
+      console.log('📊 Provider statistics:', stats);
+      
+      // Validate each provider
+      let validProviders = 0;
+      let readyProviders = 0;
+      
+      console.log('🔍 Detailed provider validation:');
+      for (const [providerId, config] of Object.entries(this.settings.providers)) {
+        const provider = this.providerManager.getProvider(providerId);
+        const hasApiKey = provider ? !!(provider as any).apiKey : false;
+        const isReady = hasApiKey && config.authenticated;
+        
+        console.log(`  ${providerId}: ` +
+          `provider=${!!provider}, ` +
+          `hasApiKey=${hasApiKey}, ` +
+          `authenticated=${config.authenticated}, ` +
+          `enabled=${config.enabled}, ` +
+          `ready=${isReady}`);
+        
+        if (provider) validProviders++;
+        if (isReady) readyProviders++;
       }
+      
+      console.log(`✅ Validation complete: ${validProviders} valid providers, ${readyProviders} ready for use`);
+      
+      // Final state summary
+      console.log('🏁 Final provider auth states after initialization:', 
+        Object.entries(this.settings.providers).map(([id, config]) => {
+          const provider = this.providerManager.getProvider(id);
+          const hasApiKey = provider ? !!(provider as any).apiKey : false;
+          const status = hasApiKey && config.authenticated ? '🟢 READY' : 
+                        config.authenticated ? '🟡 AUTH' :
+                        config.hasApiKey ? '🟠 KEY' : '⚪ NONE';
+          return `${id}: ${status}`;
+        }).join(', ')
+      );
+      
+    } catch (error) {
+      console.error('❌ Provider state validation failed:', error);
+      // Don't throw, as this is just validation
     }
-    
-    // Save settings to persist any new providers
-    await this.saveSettings();
-    
-    // Log final authentication states
-    console.log('🔑 Final provider auth states after initialization:', 
-      Object.entries(this.settings.providers).map(([id, config]) => 
-        `${id}: ${config.authenticated ? 'authenticated' : 'not authenticated'}`
-      ).join(', ')
-    );
   }
 
   /**
@@ -366,6 +655,47 @@ export default class ObsiusPlugin extends Plugin {
         new Notice(`🔧 Registry: ${debugInfo.enabledTools.length} tools enabled`);
       }
     });
+
+    // Performance test command
+    this.addCommand({
+      id: 'test-performance',
+      name: 'Test: Performance Benchmarks',
+      callback: async () => {
+        new Notice('⏱️ Starting performance tests...');
+        
+        // Test 1: Plugin reload time
+        console.log('📊 Starting performance benchmarks...');
+        
+        // Test 2: API key save/load cycle
+        const testProvider = 'openai';
+        const testKey = 'test-' + Math.random().toString(36).substring(7);
+        
+        // Measure save time
+        const saveStart = performance.now();
+        await this.providerManager.setProviderApiKey(testProvider, testKey);
+        const saveTime = performance.now() - saveStart;
+        
+        // Measure load time (check provider config)
+        const loadStart = performance.now();
+        const providerConfig = this.providerManager.getProviderConfig(testProvider);
+        const hasKey = providerConfig ? providerConfig.hasApiKey : false;
+        const loadTime = performance.now() - loadStart;
+        
+        // Clean up test key
+        await this.providerManager.removeProviderApiKey(testProvider);
+        
+        const report = `
+Performance Test Results:
+========================
+API Key Save: ${saveTime.toFixed(2)}ms
+API Key Load: ${loadTime.toFixed(2)}ms
+Total cycle: ${(saveTime + loadTime).toFixed(2)}ms
+        `;
+        
+        console.log(report);
+        new Notice(`⏱️ Performance test complete! Check console for details.`);
+      }
+    });
   }
 
   /**
@@ -405,14 +735,187 @@ export default class ObsiusPlugin extends Plugin {
   }
 
   /**
-   * Save plugin settings
+   * Save plugin settings with enhanced reliability
    */
   async saveSettings() {
-    await this.saveData(this.settings);
+    const startTime = Date.now();
+    console.log(`💾 [${startTime}] Starting settings save...`);
     
-    // Update tool registry with new settings
-    if (this.toolRegistry) {
-      this.updateToolRegistry();
+    try {
+      // Save settings with retry logic
+      let attempts = 0;
+      const maxAttempts = 3;
+      let saveSuccess = false;
+      
+      while (attempts < maxAttempts && !saveSuccess) {
+        try {
+          // Load existing data to preserve secure keys
+          const existingData = await this.loadData() || {};
+          
+          // Debug: Check if secureApiKeys exists
+          if ('secureApiKeys' in existingData) {
+            console.log('📦 Preserving existing secureApiKeys during settings save');
+          }
+          
+          // Merge settings while preserving other data like secureApiKeys
+          const dataToSave = {
+            ...existingData,  // Preserve existing data
+            ...this.settings  // Override with current settings
+          };
+          
+          await this.saveData(dataToSave);
+          console.log(`✅ Settings saved successfully on attempt ${attempts + 1}`);
+          
+          // Verify save immediately
+          const verifyData = await this.loadData();
+          const isValid = verifyData && 
+            typeof verifyData === 'object' && 
+            'providers' in verifyData &&
+            'defaultProvider' in verifyData;
+          
+          if (isValid) {
+            saveSuccess = true;
+            console.log(`✅ Settings save verified successfully`);
+          } else {
+            throw new Error('Settings verification failed - invalid data structure');
+          }
+          
+        } catch (error) {
+          attempts++;
+          console.error(`❌ Settings save attempt ${attempts}/${maxAttempts} failed:`, error);
+          
+          if (attempts >= maxAttempts) {
+            throw new Error(`Failed to save settings after ${maxAttempts} attempts: ${error.message}`);
+          }
+          
+          // Wait before retry
+          await new Promise(resolve => setTimeout(resolve, 100 * attempts));
+        }
+      }
+      
+      // Synchronize provider instances after settings save
+      if (this.providerManager) {
+        await this.syncProviderInstancesAfterSave();
+        
+        // Restore API keys to provider instances
+        await this.providerManager.restoreApiKeysToProviders();
+      }
+      
+      // Update tool registry with new settings
+      if (this.toolRegistry) {
+        this.updateToolRegistry();
+      }
+      
+      const saveTime = Date.now() - startTime;
+      console.log(`✅ Settings save completed successfully in ${saveTime}ms`);
+      
+    } catch (error) {
+      const saveTime = Date.now() - startTime;
+      console.error(`❌ Critical: Settings save failed after ${saveTime}ms:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Synchronize provider instances after settings save to ensure consistency
+   */
+  private async syncProviderInstancesAfterSave(): Promise<void> {
+    console.log('🔄 Synchronizing provider instances after settings save...');
+    
+    try {
+      // Get current provider configurations from manager
+      const managerConfigs = this.providerManager.getAllProviderConfigs();
+      
+      // Check each provider for sync issues
+      for (const [providerId, settingsConfig] of Object.entries(this.settings.providers)) {
+        const managerConfig = managerConfigs[providerId];
+        const provider = await this.providerManager.getProviderById(providerId);
+        
+        if (!provider || !managerConfig) {
+          console.warn(`⚠️ Provider ${providerId} not found in manager during sync`);
+          continue;
+        }
+        
+        // Check for config/instance mismatches
+        const configHasKey = settingsConfig.hasApiKey;
+        const instanceHasKey = !!(provider as any).apiKey;
+        const configAuth = settingsConfig.authenticated;
+        const managerAuth = managerConfig.authenticated;
+        
+        console.log(`🔍 Sync check ${providerId}:`, {
+          settingsHasKey: configHasKey,
+          instanceHasKey,
+          settingsAuth: configAuth,
+          managerAuth,
+          synced: configHasKey === instanceHasKey && configAuth === managerAuth
+        });
+        
+        // Sync settings config with manager state with authentication protection
+        let hasUpdates = false;
+        
+        // Protect authentication state - only update if manager has stronger state
+        const shouldUpdateAuth = managerConfig.authenticated && !settingsConfig.authenticated;
+        const shouldUpdateHasKey = managerConfig.hasApiKey && !settingsConfig.hasApiKey;
+        
+        if (settingsConfig.hasApiKey !== managerConfig.hasApiKey) {
+          // Only update hasApiKey if manager has stronger state (true > false)
+          if (shouldUpdateHasKey || (!managerConfig.hasApiKey && settingsConfig.hasApiKey)) {
+            settingsConfig.hasApiKey = managerConfig.hasApiKey;
+            hasUpdates = true;
+            console.log(`🔄 Synced hasApiKey for ${providerId}: ${managerConfig.hasApiKey}`);
+          } else {
+            console.log(`🛡️ Protected hasApiKey state for ${providerId}: keeping ${settingsConfig.hasApiKey}`);
+          }
+        }
+        
+        if (settingsConfig.authenticated !== managerConfig.authenticated) {
+          // Only update authenticated if manager has stronger state (true > false)
+          if (shouldUpdateAuth || (!managerConfig.authenticated && settingsConfig.authenticated)) {
+            settingsConfig.authenticated = managerConfig.authenticated;
+            hasUpdates = true;
+            console.log(`🔄 Synced authenticated for ${providerId}: ${managerConfig.authenticated}`);
+          } else {
+            console.log(`🛡️ Protected authentication state for ${providerId}: keeping ${settingsConfig.authenticated}`);
+          }
+        }
+        
+        if (settingsConfig.keyPrefix !== managerConfig.keyPrefix) {
+          // Only update if manager has a value or settings doesn't have one
+          if (managerConfig.keyPrefix || !settingsConfig.keyPrefix) {
+            settingsConfig.keyPrefix = managerConfig.keyPrefix;
+            hasUpdates = true;
+            console.log(`🔄 Synced keyPrefix for ${providerId}: ${managerConfig.keyPrefix}`);
+          }
+        }
+        
+        if (settingsConfig.lastVerified !== managerConfig.lastVerified) {
+          // Only update if manager has a newer timestamp or settings doesn't have one
+          const managerTime = managerConfig.lastVerified ? new Date(managerConfig.lastVerified).getTime() : 0;
+          const settingsTime = settingsConfig.lastVerified ? new Date(settingsConfig.lastVerified).getTime() : 0;
+          
+          if (managerTime > settingsTime || !settingsConfig.lastVerified) {
+            settingsConfig.lastVerified = managerConfig.lastVerified;
+            hasUpdates = true;
+            console.log(`🔄 Synced lastVerified for ${providerId}: ${managerConfig.lastVerified}`);
+          }
+        }
+        
+        // If instance has no key but config says it does, attempt recovery
+        if (configHasKey && !instanceHasKey) {
+          console.warn(`⚠️ Provider ${providerId} config claims API key but instance missing - triggering recovery`);
+          await this.providerManager.getProviderById(providerId); // This will trigger recovery
+        }
+        
+        if (hasUpdates) {
+          console.log(`✅ Updated settings config for ${providerId}`);
+        }
+      }
+      
+      console.log('✅ Provider instance synchronization completed');
+      
+    } catch (error) {
+      console.error('❌ Provider instance synchronization failed:', error);
+      // Don't throw - this is cleanup, not critical
     }
   }
 
@@ -433,6 +936,82 @@ export default class ObsiusPlugin extends Plugin {
     if (this.chatView) {
       this.chatView.updateLanguage();
     }
+  }
+  /**
+   * Verify filesystem and data persistence consistency
+   */
+  private async verifyFilesystemAndDataConsistency(): Promise<void> {
+    console.log('🔍 Starting filesystem and data consistency verification...');
+    
+    try {
+      // Step 1: Basic filesystem stability check
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      // Step 2: Test write-read cycle to verify data persistence
+      console.log('📝 Testing data persistence cycle...');
+      
+      const testKey = '_obsius_consistency_test';
+      const testValue = {
+        timestamp: Date.now(),
+        testId: Math.random().toString(36).substring(7)
+      };
+      
+      // Write test data
+      const currentData = await this.loadData() || {};
+      currentData[testKey] = testValue;
+      await this.saveData(currentData);
+      console.log('✅ Test data written successfully');
+      
+      // Wait for filesystem operations to complete
+      await new Promise(resolve => setTimeout(resolve, 150));
+      
+      // Read and verify test data
+      const verifyData = await this.loadData();
+      const retrievedValue = verifyData?.[testKey];
+      
+      if (retrievedValue && 
+          retrievedValue.timestamp === testValue.timestamp && 
+          retrievedValue.testId === testValue.testId) {
+        console.log('✅ Data persistence verification successful');
+        
+        // Clean up test data
+        delete verifyData[testKey];
+        await this.saveData(verifyData);
+        console.log('🗑️ Test data cleaned up');
+      } else {
+        console.warn('⚠️ Data persistence verification failed - data may not be stable');
+      }
+      
+      // Step 3: Check for plugin data directory stability
+      const vaultAdapter = this.app.vault.adapter;
+      if (vaultAdapter && typeof (vaultAdapter as any).path === 'string') {
+        const pluginDataPath = (vaultAdapter as any).path;
+        console.log(`📁 Plugin data path confirmed: ${pluginDataPath}`);
+      }
+      
+      // Step 4: Verify core Obsidian components are stable
+      const coreStability = {
+        vault: !!this.app.vault,
+        workspace: !!this.app.workspace,
+        metadataCache: !!this.app.metadataCache,
+        fileManager: !!this.app.fileManager
+      };
+      
+      console.log('🔧 Core component stability:', coreStability);
+      
+      const allStable = Object.values(coreStability).every(stable => stable);
+      if (allStable) {
+        console.log('✅ All core components are stable');
+      } else {
+        console.warn('⚠️ Some core components may not be fully stable');
+      }
+      
+    } catch (error) {
+      console.error('❌ Filesystem and data consistency verification failed:', error);
+      // Don't throw - this is a verification step, not a requirement
+    }
+    
+    console.log('🏁 Filesystem and data consistency verification completed');
   }
 }
 

@@ -3,7 +3,7 @@
  * Handles authentication and model management for OpenAI services
  */
 
-import { BaseProvider, ProviderAuthResult, ProviderConfig } from './BaseProvider';
+import { BaseProvider, ProviderAuthResult, ProviderConfig, AIMessage, GenerationOptions, AIResponse, StreamChunk } from './BaseProvider';
 
 /**
  * OpenAI API configuration
@@ -52,6 +52,8 @@ export class OpenAIProvider extends BaseProvider {
   constructor(config: OpenAIConfig = { name: 'OpenAI', defaultModel: 'gpt-4' }) {
     super({
       baseUrl: 'https://api.openai.com',
+      timeout: 90000,    // 90 seconds for OpenAI API (AI responses can be slow)
+      maxRetries: 3,     // 3 retries for better reliability
       ...config
     });
     
@@ -73,6 +75,10 @@ export class OpenAIProvider extends BaseProvider {
 
   get modelsEndpoint(): string {
     return `${this.config.baseUrl}/${this.apiVersion}/models`;
+  }
+
+  get completionEndpoint(): string {
+    return `${this.config.baseUrl}/${this.apiVersion}/chat/completions`;
   }
 
   /**
@@ -282,6 +288,135 @@ export class OpenAIProvider extends BaseProvider {
     }
 
     return { currency: 'USD' };
+  }
+
+  /**
+   * Format completion request for OpenAI API
+   */
+  protected formatCompletionRequest(messages: AIMessage[], options: GenerationOptions): any {
+    const request: any = {
+      model: this.config.defaultModel,
+      messages: messages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      })),
+      max_tokens: options.maxTokens || 1000,
+      temperature: options.temperature || 0.7
+    };
+
+    // Add tools if provided
+    if (options.tools && options.tools.length > 0) {
+      request.tools = options.tools;
+      request.tool_choice = 'auto';
+    }
+
+    // Add streaming if requested
+    if (options.stream) {
+      request.stream = true;
+    }
+
+    return request;
+  }
+
+  /**
+   * Parse completion response from OpenAI
+   */
+  protected parseCompletionResponse(response: any): AIResponse {
+    try {
+      if (response.choices && response.choices.length > 0) {
+        const choice = response.choices[0];
+        const message = choice.message;
+
+        const aiResponse: AIResponse = {
+          content: message.content || '',
+          finishReason: choice.finish_reason
+        };
+
+        // Add usage information if available
+        if (response.usage) {
+          aiResponse.usage = {
+            promptTokens: response.usage.prompt_tokens,
+            completionTokens: response.usage.completion_tokens,
+            totalTokens: response.usage.total_tokens
+          };
+        }
+
+        // Add tool calls if present
+        if (message.tool_calls && message.tool_calls.length > 0) {
+          aiResponse.toolCalls = message.tool_calls;
+        }
+
+        return aiResponse;
+      }
+
+      throw new Error('No choices in response');
+    } catch (error) {
+      throw new Error(`Failed to parse OpenAI response: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Parse streaming response chunk from OpenAI
+   */
+  protected parseStreamChunk(chunk: string): StreamChunk | null {
+    try {
+      // OpenAI streaming format: "data: {json}\n"
+      if (!chunk.startsWith('data: ')) {
+        return null;
+      }
+
+      const dataStr = chunk.slice(6).trim();
+      
+      // Handle end of stream
+      if (dataStr === '[DONE]') {
+        return {
+          content: '',
+          isComplete: true,
+          finishReason: 'stop'
+        };
+      }
+
+      const data = JSON.parse(dataStr);
+      
+      if (data.choices && data.choices.length > 0) {
+        const choice = data.choices[0];
+        const delta = choice.delta;
+        
+        let content = '';
+        if (delta.content) {
+          content = delta.content;
+        }
+
+        const isComplete = choice.finish_reason !== null;
+        
+        const streamChunk: StreamChunk = {
+          content,
+          isComplete,
+          finishReason: choice.finish_reason
+        };
+
+        // Add usage information if available (usually in last chunk)
+        if (data.usage) {
+          streamChunk.usage = {
+            promptTokens: data.usage.prompt_tokens,
+            completionTokens: data.usage.completion_tokens,
+            totalTokens: data.usage.total_tokens
+          };
+        }
+
+        // Add tool calls if present
+        if (delta.tool_calls && delta.tool_calls.length > 0) {
+          streamChunk.toolCalls = delta.tool_calls;
+        }
+
+        return streamChunk;
+      }
+
+      return null;
+    } catch (error) {
+      console.warn('Failed to parse OpenAI stream chunk:', error);
+      return null;
+    }
   }
 
   /**

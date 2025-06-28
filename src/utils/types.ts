@@ -141,6 +141,33 @@ export interface SearchMatch {
 // ============================================================================
 
 /**
+ * Error categorization for detailed error handling
+ */
+export type ErrorCategory = 
+  | 'AUTH_ERROR'
+  | 'RATE_LIMIT_ERROR' 
+  | 'NETWORK_ERROR'
+  | 'MODEL_ERROR'
+  | 'PROVIDER_ERROR'
+  | 'TOOL_EXECUTION_ERROR'
+  | 'PERMISSION_ERROR'
+  | 'FILE_ERROR'
+  | 'VALIDATION_ERROR'
+  | 'UNKNOWN_ERROR';
+
+/**
+ * Enhanced error information
+ */
+export interface ObsiusError {
+  category: ErrorCategory;
+  message: string;
+  details?: string;
+  retryable: boolean;
+  userGuidance?: string;
+  originalError?: Error;
+}
+
+/**
  * Chat message types
  */
 export interface ChatMessage {
@@ -371,6 +398,35 @@ export interface TranslationKeys {
     confirm: string;
     yes: string;
     no: string;
+  };
+
+  // Error Messages
+  errors: {
+    authentication: {
+      invalid: string;
+    };
+    rateLimit: {
+      exceeded: string;
+    };
+    network: {
+      connection: string;
+    };
+    model: {
+      unavailable: string;
+    };
+    provider: {
+      notConfigured: string;
+    };
+    unknown: {
+      general: string;
+    };
+    tool: {
+      permission: string;
+      fileAccess: string;
+      validation: string;
+      execution: string;
+      unknown: string;
+    };
   };
 }
 

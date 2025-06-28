@@ -190,11 +190,62 @@ $ obsius (None)  # When no provider is configured
 3. Test connection using the interface
 4. Provider status will update in CLI placeholder
 
+### Language Settings
+Obsius supports multiple interface languages with full localization:
+
+#### Supported Languages
+- **English** (default): Full interface support with native terminology
+- **Japanese (日本語)**: Complete localization with natural expressions
+
+#### Changing Language
+1. Go to Settings → Obsius → Interface Settings
+2. Select your preferred language from the dropdown
+3. Interface updates immediately without requiring restart
+4. All CLI commands, messages, and help text adapt to selected language
+
+#### Localized Features
+- **Command descriptions**: All `/help` output in selected language
+- **Status messages**: Provider status, system information
+- **Error messages**: Clear error reporting in native language
+- **Date formatting**: Locale-appropriate date display
+- **Terminology**: Natural language choices (e.g., "保管庫" instead of "ボルト" in Japanese)
+
+#### Language Examples
+
+**English Interface:**
+```
+✻ Welcome to Obsius v0.1.0!
+Vault: MyVault
+Type /help for commands or start chatting.
+$ /help
+Commands:
+  /help      Show commands
+  /clear     Clear terminal
+  /provider  Show providers
+  /settings  Open settings
+  /status    Show status
+```
+
+**Japanese Interface (日本語):**
+```
+✻ Obsius v0.1.0 へようこそ！
+保管庫: MyVault
+コマンドは /help で確認できます。お気軽にチャットを開始してください。
+$ /help
+コマンド:
+  /help      コマンド表示
+  /clear     画面クリア
+  /provider  プロバイダ表示
+  /settings  設定を開く
+  /status    ステータス表示
+```
+
 ### Customization Options
-- **Theme**: Automatic light/dark mode support
+- **Language**: English (default) or Japanese with automatic interface updates
+- **Theme**: Automatic light/dark mode support (uses Obsidian's native theming)
 - **History Size**: Configurable command history limit
 - **Auto-scroll**: Automatic scrolling to latest output
-- **Timestamps**: Optional timestamp display
+- **Timestamps**: Optional timestamp display with locale-appropriate formatting
 
 ## Tips and Best Practices
 

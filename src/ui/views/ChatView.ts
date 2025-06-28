@@ -6,6 +6,8 @@
 import { ItemView, WorkspaceLeaf } from 'obsidian';
 import ObsiusPlugin from '../../../main';
 import { t, initializeI18n, formatDate, getCommandDescriptions } from '../../utils/i18n';
+import { AgentOrchestrator, ConversationContext } from '../../core/AgentOrchestrator';
+import { AssistantResponse } from '../../utils/types';
 
 export const VIEW_TYPE_OBSIUS_CHAT = 'obsius-chat-view';
 
@@ -20,6 +22,8 @@ export class ChatView extends ItemView {
   private currentInput: HTMLInputElement;
   private commandHistory: string[] = [];
   private historyIndex: number = -1;
+  private agentOrchestrator: AgentOrchestrator | null = null;
+  private isProcessing: boolean = false;
 
   constructor(leaf: WorkspaceLeaf, plugin: ObsiusPlugin) {
     super(leaf);
@@ -27,6 +31,22 @@ export class ChatView extends ItemView {
     
     // Initialize i18n with user's language preference
     initializeI18n(this.plugin.settings.ui.language);
+    
+    // Initialize agent orchestrator
+    this.initializeAgentOrchestrator();
+  }
+
+  /**
+   * Initialize the agent orchestrator for AI interactions
+   */
+  private initializeAgentOrchestrator(): void {
+    if (this.plugin.providerManager && this.plugin.toolRegistry) {
+      this.agentOrchestrator = new AgentOrchestrator(
+        this.plugin.app,
+        this.plugin.providerManager,
+        this.plugin.toolRegistry
+      );
+    }
   }
 
   getViewType(): string {
@@ -223,9 +243,10 @@ export class ChatView extends ItemView {
   /**
    * Add output line
    */
-  private addOutput(text: string, type: 'normal' | 'error' | 'success' | 'info' = 'normal'): void {
+  private addOutput(text: string, type: 'normal' | 'error' | 'success' | 'info' = 'normal'): HTMLElement {
     const line = this.outputContainer.createDiv(`obsius-output-line ${type}`);
     line.textContent = text;
+    return line;
   }
 
   /**
@@ -260,27 +281,189 @@ export class ChatView extends ItemView {
    * Send chat message to AI
    */
   private async sendChatMessage(message: string): Promise<void> {
+    if (this.isProcessing) {
+      this.addOutput(t('cli.thinking'), 'info');
+      return;
+    }
+
+    console.log('🤖 ChatView.sendChatMessage called with:', message);
+
     const provider = this.getCurrentProvider();
     const config = this.plugin.settings.providers[provider];
     
+    console.log('🔑 Current provider:', provider, 'config:', config);
+    
     if (!config?.authenticated) {
+      console.log('❌ Provider not authenticated');
       this.addOutput(t('provider.noAuthenticated'), 'error');
       this.addOutput(t('provider.checkStatus'), 'info');
       return;
     }
+
+    if (!this.agentOrchestrator) {
+      console.log('❌ Agent orchestrator not initialized');
+      this.addOutput(t('general.error') + ': Agent orchestrator not initialized', 'error');
+      return;
+    }
+
+    console.log('✅ All checks passed, proceeding with AI processing');
     
-    // Show thinking indicator
-    this.addOutput(t('cli.thinking'), 'info');
+    this.isProcessing = true;
     
     try {
-      // TODO: Integrate with AgentOrchestrator
-      await this.simulateTypingDelay();
-      this.addOutput(t('tools.aiIntegration'), 'info');
-      this.addOutput(t('tools.placeholder'));
+      // Build conversation context
+      const context: ConversationContext = {
+        messages: this.agentOrchestrator.getHistory(),
+        currentFile: this.getCurrentFilePath(),
+        workspaceState: this.getWorkspaceState(),
+        userId: 'user'
+      };
+
+      // Check if streaming is enabled (default to true)
+      const enableStreaming = this.plugin.settings.ui?.enableStreaming !== false;
+      
+      if (enableStreaming) {
+        console.log('🔄 Using streaming response');
+        await this.sendStreamingChatMessage(message, context);
+      } else {
+        console.log('⏳ Using non-streaming response');
+        await this.sendNonStreamingChatMessage(message, context);
+      }
       
     } catch (error) {
+      console.error('❌ Chat error:', error);
       this.addOutput(`${t('general.error')}: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+    } finally {
+      this.isProcessing = false;
     }
+  }
+
+  /**
+   * Send chat message with streaming response
+   */
+  private async sendStreamingChatMessage(message: string, context: ConversationContext): Promise<void> {
+    console.log('🔄 Starting streaming chat message processing');
+    
+    // Create streaming output line
+    const streamingLine = this.addOutput('', 'normal');
+    let accumulatedContent = '';
+    
+    // Process message with streaming AI
+    const response = await this.agentOrchestrator!.processMessageStreaming(
+      message, 
+      context,
+      (chunk) => {
+        console.log('📦 Received chunk:', chunk);
+        if (chunk.content) {
+          accumulatedContent += chunk.content;
+          streamingLine.textContent = accumulatedContent;
+          
+          // Auto-scroll to keep the streaming content visible
+          this.scrollToBottom();
+        }
+        
+        if (chunk.isComplete) {
+          console.log('✅ Streaming complete');
+        }
+      },
+      {
+        providerId: this.getCurrentProvider()  // Pass specific provider ID
+      }
+    );
+    
+    console.log('📋 Final response:', response);
+    this.displayActionResults(response);
+  }
+
+  /**
+   * Send chat message without streaming (fallback)
+   */
+  private async sendNonStreamingChatMessage(message: string, context: ConversationContext): Promise<void> {
+    // Show thinking indicator
+    const thinkingLine = this.addOutput(t('cli.thinking'), 'info');
+    
+    // Process message with AI
+    const response = await this.agentOrchestrator!.processMessage(message, context, {
+      providerId: this.getCurrentProvider()  // Pass specific provider ID
+    });
+    
+    // Remove thinking indicator
+    if (thinkingLine.parentNode) {
+      thinkingLine.parentNode.removeChild(thinkingLine);
+    }
+    
+    // Display AI response
+    this.addOutput(response.message.content);
+    
+    this.displayActionResults(response);
+  }
+
+  /**
+   * Display action results and file summaries
+   */
+  private displayActionResults(response: AssistantResponse): void {
+    // Display action results if any
+    if (response.actions && response.actions.length > 0) {
+      this.addOutput(''); // Empty line for spacing
+      
+      for (const action of response.actions) {
+        if (action.result?.success) {
+          this.addOutput(`✅ ${action.description}: ${action.result.message}`, 'success');
+          
+          // Show additional details if available
+          if (action.result.data) {
+            const data = action.result.data;
+            if (data.path) {
+              this.addOutput(`   📄 ${data.path}`, 'info');
+            }
+            if (data.title) {
+              this.addOutput(`   📝 ${data.title}`, 'info');
+            }
+          }
+        } else {
+          this.addOutput(`❌ ${action.description}: ${action.result?.message || 'Failed'}`, 'error');
+        }
+      }
+    }
+    
+    // Show files created/modified summary
+    if (response.filesCreated && response.filesCreated.length > 0) {
+      this.addOutput(''); // Empty line
+      this.addOutput(`📄 Created ${response.filesCreated.length} file(s):`, 'success');
+      response.filesCreated.forEach((file: string) => {
+        this.addOutput(`   • ${file}`, 'info');
+      });
+    }
+    
+    if (response.filesModified && response.filesModified.length > 0) {
+      this.addOutput(''); // Empty line
+      this.addOutput(`📝 Modified ${response.filesModified.length} file(s):`, 'success');
+      response.filesModified.forEach((file: string) => {
+        this.addOutput(`   • ${file}`, 'info');
+      });
+    }
+  }
+
+  /**
+   * Get current file path
+   */
+  private getCurrentFilePath(): string | undefined {
+    const activeFile = this.plugin.app.workspace.getActiveFile();
+    return activeFile?.path;
+  }
+
+  /**
+   * Get current workspace state
+   */
+  private getWorkspaceState(): any {
+    const activeFile = this.plugin.app.workspace.getActiveFile();
+    return {
+      activeFile: activeFile?.path,
+      openTabs: this.plugin.app.workspace.getLeavesOfType('markdown').map(leaf => {
+        const view = leaf.view as { file?: { path: string } };
+        return view.file?.path || '';
+      }).filter(path => path)
+    };
   }
 
   /**
@@ -403,6 +586,9 @@ export class ChatView extends ItemView {
    * Refresh provider options (called when providers are updated)
    */
   public refreshProviders(): void {
+    // Re-initialize agent orchestrator when providers change
+    this.initializeAgentOrchestrator();
+    
     // Update prompt with new provider info
     this.updatePrompt();
   }

@@ -16,6 +16,8 @@ export interface ApiKeyInputState {
   authenticated: boolean;
   error?: string;
   lastValidated?: Date;
+  authInProgress: boolean;
+  skipAutoValidation: boolean;
 }
 
 /**
@@ -44,7 +46,7 @@ export class ApiKeyInput {
   private setting: Setting;
   private inputElement: HTMLInputElement | null = null;
   private statusElement: HTMLElement | null = null;
-  private testButton: HTMLButtonElement | null = null;
+  private connectionButton: HTMLButtonElement | null = null;
   private validationTimeout: NodeJS.Timeout | null = null;
 
   constructor(container: HTMLElement, config: ApiKeyInputConfig) {
@@ -55,7 +57,9 @@ export class ApiKeyInput {
       masked: true,
       validating: false,
       authenticated: config.initialAuthenticated || false,
-      lastValidated: config.initialLastVerified ? new Date(config.initialLastVerified) : undefined
+      lastValidated: config.initialLastVerified ? new Date(config.initialLastVerified) : undefined,
+      authInProgress: false,
+      skipAutoValidation: config.initialAuthenticated || false
     };
 
     this.initialize();
@@ -73,13 +77,17 @@ export class ApiKeyInput {
     this.createStatusDisplay();
     
     if (this.config.showTestButton !== false) {
-      this.createTestButton();
+      this.createConnectionButton();
     }
+    
+    // Add input protection after all elements are created
+    this.addInputProtection();
 
     // Auto-validate only for real API keys, not placeholders or already authenticated
     if (this.state.value && 
         this.config.autoValidate !== false && 
         !this.state.authenticated && 
+        !this.state.skipAutoValidation &&
         !this.isPlaceholderValue(this.state.value)) {
       console.log(`🔑 Scheduling auto-validation for ${this.config.provider.displayName}`);
       this.scheduleValidation();
@@ -87,6 +95,7 @@ export class ApiKeyInput {
       const reasons = [];
       if (this.config.autoValidate === false) reasons.push('autoValidate disabled');
       if (this.state.authenticated) reasons.push('already authenticated');
+      if (this.state.skipAutoValidation) reasons.push('auto-validation disabled');
       if (this.isPlaceholderValue(this.state.value)) reasons.push('placeholder value');
       console.log(`🔑 Skipping auto-validation for ${this.config.provider.displayName}: ${reasons.join(', ')}`);
     }
@@ -100,6 +109,9 @@ export class ApiKeyInput {
     return placeholders.includes(value) || 
            value.startsWith('stored-') || 
            /^•+$/.test(value) ||
+           /^sk-.{1,4}\.{3,}$/.test(value) || // OpenAI prefix format: sk-p...
+           /^sk-ant-.{1,4}\.{3,}$/.test(value) || // Anthropic prefix format: sk-ant-ab...
+           /^AI.{1,4}\.{3,}$/.test(value) || // Google prefix format: AI12...
            /^sk-.{2,4}•{8,}/.test(value) || // OpenAI masked format: sk-ab••••••••••
            /^sk-ant-.{2,4}•{8,}/.test(value) || // Anthropic masked format: sk-ant-ab••••••••••
            /^AI.{2,4}•{8,}/.test(value); // Google masked format
@@ -184,23 +196,44 @@ export class ApiKeyInput {
   }
 
   /**
-   * Create connection button
+   * Create connection button with enhanced interaction protection
    */
-  private createTestButton(): void {
+  private createConnectionButton(): void {
     this.setting.addButton(button => {
-      this.testButton = button.buttonEl;
+      this.connectionButton = button.buttonEl;
       
       button
         .setButtonText('Connection')
-        .setClass('obsius-test-button')
+        .setClass('obsius-connection-button')
         .onClick(async () => {
+          // Prevent rapid clicking
+          if (this.connectionButton && this.connectionButton.disabled) {
+            return;
+          }
+          
           await this.testConnection();
         });
+      
+      // Add double-click protection
+      this.connectionButton.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+      
+      // Add keyboard handling
+      this.connectionButton.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          if (this.connectionButton && this.connectionButton.disabled) {
+            e.preventDefault();
+            return;
+          }
+        }
+      });
     });
   }
 
   /**
-   * Handle input value change
+   * Handle input value change with enhanced state protection
    */
   private async handleInputChange(value: string): Promise<void> {
     // Unmask the value if it was masked
@@ -214,9 +247,22 @@ export class ApiKeyInput {
       return;
     }
 
+    // Prevent cascading authentication during input change
+    if (this.state.authInProgress) {
+      console.log(`🔑 Skipping input change processing - authentication in progress`);
+      return;
+    }
+
+    // Prevent rapid changes during processing
+    if (this.state.validating) {
+      console.log(`🔑 Skipping input change - validation in progress`);
+      return;
+    }
+
     this.state.value = actualValue;
     this.state.authenticated = false;
     this.state.error = undefined;
+    this.state.skipAutoValidation = false; // Reset for new input
 
     // Clear previous validation timeout
     if (this.validationTimeout) {
@@ -226,7 +272,7 @@ export class ApiKeyInput {
     // Update UI
     this.updateStatusDisplay();
 
-    // Save the key
+    // Save the key with error handling
     try {
       await this.config.onKeyChange(actualValue);
     } catch (error) {
@@ -235,11 +281,16 @@ export class ApiKeyInput {
       return;
     }
 
-    // Schedule auto-validation only for real API keys, not placeholders
+    // Schedule auto-validation only for real API keys, not placeholders, and not if already authenticated
     if (actualValue && 
         this.config.autoValidate !== false && 
+        !this.state.skipAutoValidation &&
+        !this.state.authenticated &&
         !this.isPlaceholderValue(actualValue)) {
+      console.log(`🔄 Scheduling auto-validation for ${this.config.provider.displayName}`);
       this.scheduleValidation();
+    } else if (this.state.authenticated) {
+      console.log(`🔒 Skipping auto-validation for ${this.config.provider.displayName} - already authenticated`);
     }
   }
 
@@ -257,7 +308,7 @@ export class ApiKeyInput {
   }
 
   /**
-   * Establish connection with the provider
+   * Establish connection with the provider with enhanced UI protection
    */
   private async testConnection(): Promise<void> {
     if (!this.state.value) {
@@ -266,17 +317,35 @@ export class ApiKeyInput {
       return;
     }
 
-    // If already authenticated, confirm re-authentication
+    // Prevent double-execution during auth process
+    if (this.state.authInProgress) {
+      console.log(`🔑 Skipping testConnection - authentication already in progress`);
+      return;
+    }
+
+    // If already authenticated, prevent unnecessary re-authentication
     if (this.state.authenticated) {
+      // Only allow manual re-authentication after explicit user confirmation
+      if (this.state.skipAutoValidation) {
+        console.log(`🔒 Skipping re-authentication for ${this.config.provider.displayName} - already authenticated and locked`);
+        return;
+      }
+      
+      // For manual button clicks, ask for confirmation
       const confirmReauth = confirm(`${this.config.provider.displayName} is already connected. Do you want to test the connection again?`);
       if (!confirmReauth) {
         return;
       }
+      
+      console.log(`🔄 User confirmed re-authentication for ${this.config.provider.displayName}`);
     }
 
+    // Immediate UI feedback and protection
+    this.state.authInProgress = true;
     this.state.validating = true;
     this.state.error = undefined;
     this.updateStatusDisplay();
+    this.disableUserInteraction();
 
     try {
       // Set the API key and test
@@ -287,11 +356,33 @@ export class ApiKeyInput {
       this.state.authenticated = result.success;
       this.state.lastValidated = new Date();
       
-      if (!result.success) {
+      if (result.success) {
+        // Permanently disable auto-validation and lock authentication state
+        this.state.skipAutoValidation = true;
+        console.log(`✅ Authentication successful for ${this.config.provider.displayName} - PERMANENT LOCK ENABLED`);
+        console.log(`🔒 Authentication state PERMANENTLY LOCKED for ${this.config.provider.displayName}:`, {
+          authenticated: this.state.authenticated,
+          hasApiKey: !!this.state.value,
+          lastValidated: this.state.lastValidated,
+          skipAutoValidation: this.state.skipAutoValidation
+        });
+        
+        // Clear any pending validation timeouts
+        if (this.validationTimeout) {
+          clearTimeout(this.validationTimeout);
+          this.validationTimeout = null;
+        }
+      } else {
         this.state.error = result.error || 'Authentication failed';
+        console.log(`❌ Authentication failed for ${this.config.provider.displayName}:`, result.error);
       }
 
-      // Notify parent about auth result
+      // Notify parent about auth result with enhanced logging
+      console.log(`📤 Sending auth result for ${this.config.provider.displayName}:`, {
+        success: result.success,
+        hasError: !!result.error,
+        modelsCount: result.models?.length || 0
+      });
       this.config.onAuthResult(result);
 
     } catch (error) {
@@ -299,7 +390,9 @@ export class ApiKeyInput {
       this.state.authenticated = false;
       this.state.error = error instanceof Error ? error.message : 'Unknown error';
     } finally {
+      this.state.authInProgress = false;
       this.updateStatusDisplay();
+      this.enableUserInteraction();
     }
   }
 
@@ -368,24 +461,24 @@ export class ApiKeyInput {
     }
 
     // Update connection button state with enhanced feedback
-    if (this.testButton) {
+    if (this.connectionButton) {
       if (this.state.validating) {
-        this.testButton.disabled = true;
-        this.testButton.textContent = 'Connecting...';
-        this.testButton.addClass('obsius-button-connecting');
+        this.connectionButton.disabled = true;
+        this.connectionButton.textContent = 'Connecting...';
+        this.connectionButton.addClass('obsius-button-connecting');
       } else if (this.state.authenticated) {
-        this.testButton.disabled = false;
-        this.testButton.textContent = 'Connected';
-        this.testButton.removeClass('obsius-button-connecting');
-        this.testButton.addClass('obsius-button-connected');
+        this.connectionButton.disabled = false;
+        this.connectionButton.textContent = 'Connected';
+        this.connectionButton.removeClass('obsius-button-connecting');
+        this.connectionButton.addClass('obsius-button-connected');
       } else if (!this.state.value) {
-        this.testButton.disabled = true;
-        this.testButton.textContent = 'Connection';
-        this.testButton.removeClass('obsius-button-connecting', 'obsius-button-connected');
+        this.connectionButton.disabled = true;
+        this.connectionButton.textContent = 'Connection';
+        this.connectionButton.removeClass('obsius-button-connecting', 'obsius-button-connected');
       } else {
-        this.testButton.disabled = false;
-        this.testButton.textContent = 'Connection';
-        this.testButton.removeClass('obsius-button-connecting', 'obsius-button-connected');
+        this.connectionButton.disabled = false;
+        this.connectionButton.textContent = 'Connection';
+        this.connectionButton.removeClass('obsius-button-connecting', 'obsius-button-connected');
       }
     }
   }
@@ -430,6 +523,82 @@ export class ApiKeyInput {
   }
 
   /**
+   * Disable user interaction during sensitive operations
+   */
+  private disableUserInteraction(): void {
+    if (this.inputElement) {
+      this.inputElement.disabled = true;
+    }
+    
+    if (this.connectionButton) {
+      this.connectionButton.disabled = true;
+    }
+    
+    // Disable visibility toggle
+    const toggleButton = this.container.querySelector('.obsius-visibility-toggle') as HTMLButtonElement;
+    if (toggleButton) {
+      toggleButton.disabled = true;
+    }
+  }
+
+  /**
+   * Re-enable user interaction after operations complete
+   */
+  private enableUserInteraction(): void {
+    if (this.inputElement) {
+      this.inputElement.disabled = false;
+    }
+    
+    // Connection button state will be handled by updateStatusDisplay()
+    
+    // Re-enable visibility toggle
+    const toggleButton = this.container.querySelector('.obsius-visibility-toggle') as HTMLButtonElement;
+    if (toggleButton) {
+      toggleButton.disabled = false;
+    }
+  }
+
+  /**
+   * Add input protection against rapid changes
+   */
+  private addInputProtection(): void {
+    if (!this.inputElement) return;
+    
+    // Debounce input changes
+    let inputTimeout: NodeJS.Timeout | null = null;
+    const originalOnChange = this.inputElement.onchange;
+    
+    this.inputElement.addEventListener('input', (e) => {
+      if (inputTimeout) {
+        clearTimeout(inputTimeout);
+      }
+      
+      inputTimeout = setTimeout(() => {
+        if (originalOnChange) {
+          originalOnChange.call(this.inputElement, e);
+        }
+      }, 300); // 300ms debounce
+    });
+    
+    // Prevent paste spam
+    this.inputElement.addEventListener('paste', (e) => {
+      if (this.state.authInProgress || this.state.validating) {
+        e.preventDefault();
+        return;
+      }
+    });
+    
+    // Prevent rapid key events during processing
+    this.inputElement.addEventListener('keydown', (e) => {
+      if (this.state.authInProgress || this.state.validating) {
+        if (e.key !== 'Tab' && e.key !== 'Escape') {
+          e.preventDefault();
+        }
+      }
+    });
+  }
+
+  /**
    * Destroy the component and clean up
    */
   destroy(): void {
@@ -440,5 +609,17 @@ export class ApiKeyInput {
     // Clear sensitive data
     this.state.value = '';
     this.config.provider.clearApiKey();
+    
+    // Clean up event listeners
+    if (this.inputElement) {
+      this.inputElement.removeEventListener('input', () => {});
+      this.inputElement.removeEventListener('paste', () => {});
+      this.inputElement.removeEventListener('keydown', () => {});
+    }
+    
+    if (this.connectionButton) {
+      this.connectionButton.removeEventListener('dblclick', () => {});
+      this.connectionButton.removeEventListener('keydown', () => {});
+    }
   }
 }
