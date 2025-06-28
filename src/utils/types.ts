@@ -291,6 +291,31 @@ export interface ReadManyFilesParams {
 }
 
 /**
+ * Parameters for the edit tool
+ */
+export interface EditParams {
+  /**
+   * Path to the file to modify (relative to vault root)
+   */
+  file_path: string;
+
+  /**
+   * The exact text to replace (empty string for new file creation)
+   */
+  old_string: string;
+
+  /**
+   * The text to replace old_string with
+   */
+  new_string: string;
+
+  /**
+   * Number of replacements expected (defaults to 1)
+   */
+  expected_replacements?: number;
+}
+
+/**
  * Search result item
  */
 export interface SearchResult {

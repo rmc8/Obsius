@@ -17,7 +17,8 @@ import {
   GrepTool,
   ShellTool,
   WebFetchTool,
-  ReadManyFilesTool
+  ReadManyFilesTool,
+  EditTool
 } from './src/tools';
 import { ExecutionContext, ObsiusSettings, SecureProviderConfig } from './src/utils/types';
 import { ProviderManager } from './src/core/providers/ProviderManager';
@@ -54,11 +55,11 @@ const DEFAULT_SETTINGS: ObsiusSettings = {
   },
   defaultProvider: 'openai',
   tools: {
-    enabled: ['create_note', 'read_note', 'search_notes', 'update_note', 'glob', 'list_directory', 'grep', 'shell', 'web_fetch', 'read_many_files'],
+    enabled: ['create_note', 'read_note', 'search_notes', 'update_note', 'glob', 'list_directory', 'grep', 'shell', 'web_fetch', 'read_many_files', 'edit'],
     confirmationRequired: ['update_note'],
     riskLevels: {
       low: ['create_note', 'read_note', 'search_notes', 'glob', 'list_directory', 'grep', 'web_fetch', 'read_many_files'],
-      medium: ['update_note', 'shell'],
+      medium: ['update_note', 'shell', 'edit'],
       high: []
     }
   },
@@ -626,6 +627,13 @@ export default class ObsiusPlugin extends Plugin {
       riskLevel: 'low',
       category: 'obsidian',
       enabled: this.settings.tools.enabled.includes('read_many_files')
+    });
+
+    this.toolRegistry.registerTool('edit', EditTool, {
+      description: 'Replace exact text strings in files with precise control and safety checks',
+      riskLevel: 'medium',
+      category: 'file_editing',
+      enabled: this.settings.tools.enabled.includes('edit')
     });
 
     console.log('Tool registry initialized with', this.toolRegistry.getStats());

@@ -56,7 +56,6 @@ interface FileReadResult {
 export class ReadManyFilesTool extends BaseTool<ReadManyFilesParams> {
   
   private static readonly DEFAULT_TOTAL_LIMIT = 150000;
-  private static readonly MAX_TOTAL_LIMIT = 500000;
   
   get name(): string {
     return 'read_many_files';

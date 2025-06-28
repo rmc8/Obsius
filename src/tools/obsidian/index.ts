@@ -13,6 +13,7 @@ export { GrepTool } from './GrepTool';
 export { ShellTool } from './ShellTool';
 export { WebFetchTool } from './WebFetchTool';
 export { ReadManyFilesTool } from './ReadManyFilesTool';
+export { EditTool } from './EditTool';
 
 // Re-export types for convenience
 export type {
@@ -26,6 +27,7 @@ export type {
   ShellParams,
   WebFetchParams,
   ReadManyFilesParams,
+  EditParams,
   FileEntry,
   GrepMatch,
   SearchResult,

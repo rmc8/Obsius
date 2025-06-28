@@ -19,7 +19,8 @@ export {
   GrepTool,
   ShellTool,
   WebFetchTool,
-  ReadManyFilesTool
+  ReadManyFilesTool,
+  EditTool
 } from './obsidian';
 
 // Re-export types
@@ -34,6 +35,7 @@ export type {
   ShellParams,
   WebFetchParams,
   ReadManyFilesParams,
+  EditParams,
   FileEntry,
   GrepMatch,
   SearchResult,
