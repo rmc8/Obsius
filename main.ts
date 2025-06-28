@@ -14,7 +14,8 @@ import {
   UpdateNoteTool,
   GlobTool,
   ListDirectoryTool,
-  GrepTool
+  GrepTool,
+  ShellTool
 } from './src/tools';
 import { ExecutionContext, ObsiusSettings, SecureProviderConfig } from './src/utils/types';
 import { ProviderManager } from './src/core/providers/ProviderManager';
@@ -51,11 +52,11 @@ const DEFAULT_SETTINGS: ObsiusSettings = {
   },
   defaultProvider: 'openai',
   tools: {
-    enabled: ['create_note', 'read_note', 'search_notes', 'update_note', 'glob', 'list_directory', 'grep'],
+    enabled: ['create_note', 'read_note', 'search_notes', 'update_note', 'glob', 'list_directory', 'grep', 'shell'],
     confirmationRequired: ['update_note'],
     riskLevels: {
       low: ['create_note', 'read_note', 'search_notes', 'glob', 'list_directory', 'grep'],
-      medium: ['update_note'],
+      medium: ['update_note', 'shell'],
       high: []
     }
   },
@@ -602,6 +603,13 @@ export default class ObsiusPlugin extends Plugin {
       riskLevel: 'low',
       category: 'content_search',
       enabled: this.settings.tools.enabled.includes('grep')
+    });
+
+    this.toolRegistry.registerTool('shell', ShellTool, {
+      description: 'Execute shell commands in the vault directory with security controls',
+      riskLevel: 'medium',
+      category: 'system',
+      enabled: this.settings.tools.enabled.includes('shell')
     });
 
     console.log('Tool registry initialized with', this.toolRegistry.getStats());

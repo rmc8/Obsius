@@ -231,6 +231,26 @@ export interface GrepMatch {
 }
 
 /**
+ * Parameters for the shell tool
+ */
+export interface ShellParams {
+  /**
+   * The shell command to execute
+   */
+  command: string;
+
+  /**
+   * Optional description of what the command does
+   */
+  description?: string;
+
+  /**
+   * Working directory relative to vault root (optional)
+   */
+  directory?: string;
+}
+
+/**
  * Search result item
  */
 export interface SearchResult {

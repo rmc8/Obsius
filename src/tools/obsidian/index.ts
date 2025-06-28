@@ -10,6 +10,7 @@ export { UpdateNoteTool } from './UpdateNoteTool';
 export { GlobTool } from './GlobTool';
 export { ListDirectoryTool } from './ListDirectoryTool';
 export { GrepTool } from './GrepTool';
+export { ShellTool } from './ShellTool';
 
 // Re-export types for convenience
 export type {
@@ -20,6 +21,7 @@ export type {
   GlobParams,
   ListDirectoryParams,
   GrepParams,
+  ShellParams,
   FileEntry,
   GrepMatch,
   SearchResult,
