@@ -116,6 +116,81 @@ export interface UpdateNoteParams {
 }
 
 /**
+ * Parameters for the glob tool
+ */
+export interface GlobParams {
+  /**
+   * The glob pattern to match files against
+   */
+  pattern: string;
+
+  /**
+   * The directory to search in (optional, defaults to vault root)
+   */
+  path?: string;
+
+  /**
+   * Whether the search should be case-sensitive (optional, defaults to false)
+   */
+  case_sensitive?: boolean;
+
+  /**
+   * Whether to respect .gitignore patterns (optional, defaults to true)
+   */
+  respect_git_ignore?: boolean;
+}
+
+/**
+ * Parameters for the list directory tool
+ */
+export interface ListDirectoryParams {
+  /**
+   * The absolute path to the directory to list
+   */
+  path: string;
+
+  /**
+   * Array of glob patterns to ignore (optional)
+   */
+  ignore?: string[];
+
+  /**
+   * Whether to respect .gitignore patterns (optional, defaults to true)
+   */
+  respect_git_ignore?: boolean;
+}
+
+/**
+ * File entry returned by list directory tool
+ */
+export interface FileEntry {
+  /**
+   * Name of the file or directory
+   */
+  name: string;
+
+  /**
+   * Absolute path to the file or directory
+   */
+  path: string;
+
+  /**
+   * Whether this entry is a directory
+   */
+  isDirectory: boolean;
+
+  /**
+   * Size of the file in bytes (0 for directories)
+   */
+  size: number;
+
+  /**
+   * Last modified timestamp
+   */
+  modifiedTime: Date;
+}
+
+/**
  * Search result item
  */
 export interface SearchResult {

@@ -13,7 +13,9 @@ export {
   CreateNoteTool,
   ReadNoteTool,
   SearchNotesTool,
-  UpdateNoteTool
+  UpdateNoteTool,
+  GlobTool,
+  ListDirectoryTool
 } from './obsidian';
 
 // Re-export types
@@ -22,6 +24,9 @@ export type {
   ReadNoteParams,
   SearchNotesParams,
   UpdateNoteParams,
+  GlobParams,
+  ListDirectoryParams,
+  FileEntry,
   SearchResult,
   SearchMatch
 } from '../utils/types';

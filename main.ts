@@ -11,7 +11,9 @@ import {
   CreateNoteTool, 
   ReadNoteTool, 
   SearchNotesTool, 
-  UpdateNoteTool 
+  UpdateNoteTool,
+  GlobTool,
+  ListDirectoryTool
 } from './src/tools';
 import { ExecutionContext, ObsiusSettings, SecureProviderConfig } from './src/utils/types';
 import { ProviderManager } from './src/core/providers/ProviderManager';
@@ -48,10 +50,10 @@ const DEFAULT_SETTINGS: ObsiusSettings = {
   },
   defaultProvider: 'openai',
   tools: {
-    enabled: ['create_note', 'read_note', 'search_notes', 'update_note'],
+    enabled: ['create_note', 'read_note', 'search_notes', 'update_note', 'glob', 'list_directory'],
     confirmationRequired: ['update_note'],
     riskLevels: {
-      low: ['create_note', 'read_note', 'search_notes'],
+      low: ['create_note', 'read_note', 'search_notes', 'glob', 'list_directory'],
       medium: ['update_note'],
       high: []
     }
@@ -578,6 +580,20 @@ export default class ObsiusPlugin extends Plugin {
       riskLevel: 'medium',
       category: 'obsidian',
       enabled: this.settings.tools.enabled.includes('update_note')
+    });
+
+    this.toolRegistry.registerTool('glob', GlobTool, {
+      description: 'Find files matching glob patterns (e.g., **/*.md, src/**/*.ts)',
+      riskLevel: 'low',
+      category: 'file_system',
+      enabled: this.settings.tools.enabled.includes('glob')
+    });
+
+    this.toolRegistry.registerTool('list_directory', ListDirectoryTool, {
+      description: 'List files and directories in a specified path',
+      riskLevel: 'low', 
+      category: 'file_system',
+      enabled: this.settings.tools.enabled.includes('list_directory')
     });
 
     console.log('Tool registry initialized with', this.toolRegistry.getStats());

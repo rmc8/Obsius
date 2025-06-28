@@ -24,10 +24,12 @@
 	"author": "Obsius Project Contributors",
 	"license": "MIT",
 	"dependencies": {
+		"glob": "^8.1.0",
 		"zod": "^3.22.4"
 	},
 	"devDependencies": {
 		"@jest/globals": "^30.0.3",
+		"@types/glob": "^8.1.0",
 		"@types/jest": "^30.0.0",
 		"@types/node": "^16.11.6",
 		"@typescript-eslint/eslint-plugin": "5.29.0",
