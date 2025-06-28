@@ -126,8 +126,97 @@ export class NewTool extends BaseTool<Params, Result> {
 }
 ```
 
+### TDD Development Process (Kent Beck's Methodology)
+
+Follow Kent Beck's Test-Driven Development approach for all new features and bug fixes:
+
+**🔴 Red Phase - Write Failing Test:**
+```typescript
+// Example: Testing a new tool before implementation
+describe('CreateNoteAdvanced', () => {
+  it('should create note with frontmatter and tags', async () => {
+    const tool = new CreateNoteAdvanced();
+    const result = await tool.execute({
+      title: 'Test Note',
+      content: 'Content',
+      frontmatter: { author: 'test' },
+      tags: ['test']
+    }, mockContext);
+    
+    expect(result.success).toBe(true);
+    expect(result.data.frontmatter.author).toBe('test');
+  });
+});
+```
+
+**🟢 Green Phase - Make Test Pass:**
+```typescript
+// Implement minimal code to pass the test
+export class CreateNoteAdvanced extends BaseTool {
+  async execute(params: CreateNoteParams): Promise<ToolResult> {
+    // Minimal implementation to pass test
+    const note = await this.createNoteWithFrontmatter(params);
+    return { success: true, data: note };
+  }
+}
+```
+
+**🔵 Refactor Phase - Improve Code:**
+```typescript
+// Clean up and optimize after tests pass
+export class CreateNoteAdvanced extends BaseTool {
+  async execute(params: CreateNoteParams): Promise<ToolResult> {
+    this.validateParams(params);
+    const note = await this.createOptimizedNote(params);
+    return this.formatResult(note);
+  }
+  
+  private validateParams(params: CreateNoteParams): void {
+    // Extracted validation logic
+  }
+}
+```
+
+**🎯 TDD Application in Obsius:**
+
+**For Provider Development:**
+1. Write test for authentication flow
+2. Implement minimal auth logic
+3. Refactor for security and performance
+
+**For Tool Development:**
+1. Define expected tool behavior in test
+2. Implement core functionality
+3. Add error handling and validation
+
+**For UI Components:**
+1. Test user interaction scenarios
+2. Build component to satisfy tests
+3. Optimize rendering and state management
+
+**📁 Test Organization:**
+```
+tests/
+├── unit/
+│   ├── tools/           # Tool-specific tests
+│   ├── providers/       # Provider tests
+│   └── utils/          # Utility function tests
+├── integration/
+│   ├── workflows/      # End-to-end user workflows
+│   └── providers/      # Cross-provider integration
+└── fixtures/           # Test data and mocks
+```
+
+**🔧 TDD Best Practices:**
+- Keep test cycles short (Red-Green-Refactor in minutes, not hours)
+- Write the simplest test that could possibly fail
+- Implement only enough code to make the test pass
+- Refactor with confidence knowing tests will catch regressions
+- Use descriptive test names that explain behavior
+- Mock external dependencies (Obsidian API, network calls)
+
 ### Testing Strategy
-- Unit tests for tools and providers
+- Unit tests for tools and providers (following TDD)
 - Integration tests for chat workflows
 - Manual testing for UI and user experience
 
