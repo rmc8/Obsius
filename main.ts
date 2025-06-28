@@ -26,6 +26,7 @@ import { ProviderManager } from './src/core/providers/ProviderManager';
 import { ApiKeyInput } from './src/ui/components/ApiKeyInput';
 import { ChatView, VIEW_TYPE_OBSIUS_CHAT } from './src/ui/views/ChatView';
 import { initializeI18n, t } from './src/utils/i18n';
+import { isMCPSupported, getEnvironmentInfo } from './src/utils/environment';
 
 /**
  * Default plugin settings
@@ -101,6 +102,18 @@ export default class ObsiusPlugin extends Plugin {
 
   async onload() {
     console.log('Loading Obsius AI Agent plugin...');
+
+    // Check environment capabilities
+    const envInfo = getEnvironmentInfo();
+    console.log('🔍 Environment Info:', envInfo);
+
+    // Log MCP support status
+    if (isMCPSupported()) {
+      console.log('✅ MCP (Model Context Protocol) support available');
+    } else {
+      console.log('⚠️ MCP (Model Context Protocol) not supported in this environment');
+      console.log('   This is expected in Obsidian\'s browser-based environment');
+    }
 
     // Load settings first
     await this.loadSettings();
@@ -836,6 +849,12 @@ Total cycle: ${(saveTime + loadTime).toFixed(2)}ms
           }
         }
       }
+    }
+    
+    // Adjust MCP settings based on environment support
+    if (!isMCPSupported() && this.settings.mcp.enabled) {
+      console.log('🔄 Disabling MCP due to environment limitations');
+      this.settings.mcp.enabled = false;
     }
   }
 
