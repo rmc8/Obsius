@@ -18,7 +18,8 @@ import {
   ShellTool,
   WebFetchTool,
   ReadManyFilesTool,
-  EditTool
+  EditTool,
+  OpenNoteTool
 } from './src/tools';
 import { ExecutionContext, ObsiusSettings, SecureProviderConfig } from './src/utils/types';
 import { ProviderManager } from './src/core/providers/ProviderManager';
@@ -55,10 +56,10 @@ const DEFAULT_SETTINGS: ObsiusSettings = {
   },
   defaultProvider: 'openai',
   tools: {
-    enabled: ['create_note', 'read_note', 'search_notes', 'update_note', 'glob', 'list_directory', 'grep', 'shell', 'web_fetch', 'read_many_files', 'edit'],
+    enabled: ['create_note', 'read_note', 'search_notes', 'update_note', 'glob', 'list_directory', 'grep', 'shell', 'web_fetch', 'read_many_files', 'edit', 'open_note'],
     confirmationRequired: ['update_note'],
     riskLevels: {
-      low: ['create_note', 'read_note', 'search_notes', 'glob', 'list_directory', 'grep', 'web_fetch', 'read_many_files'],
+      low: ['create_note', 'read_note', 'search_notes', 'glob', 'list_directory', 'grep', 'web_fetch', 'read_many_files', 'open_note'],
       medium: ['update_note', 'shell', 'edit'],
       high: []
     }
@@ -640,6 +641,13 @@ export default class ObsiusPlugin extends Plugin {
       riskLevel: 'medium',
       category: 'file_editing',
       enabled: this.settings.tools.enabled.includes('edit')
+    });
+
+    this.toolRegistry.registerTool('open_note', OpenNoteTool, {
+      description: 'Open notes in Obsidian workspace tabs and panes for navigation and editing',
+      riskLevel: 'low',
+      category: 'obsidian',
+      enabled: this.settings.tools.enabled.includes('open_note')
     });
 
     console.log('Tool registry initialized with', this.toolRegistry.getStats());

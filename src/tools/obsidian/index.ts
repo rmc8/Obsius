@@ -14,6 +14,7 @@ export { ShellTool } from './ShellTool';
 export { WebFetchTool } from './WebFetchTool';
 export { ReadManyFilesTool } from './ReadManyFilesTool';
 export { EditTool } from './EditTool';
+export { OpenNoteTool } from './OpenNoteTool';
 
 // Re-export types for convenience
 export type {
@@ -28,6 +29,7 @@ export type {
   WebFetchParams,
   ReadManyFilesParams,
   EditParams,
+  OpenNoteParams,
   FileEntry,
   GrepMatch,
   SearchResult,

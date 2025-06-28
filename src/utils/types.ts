@@ -394,6 +394,45 @@ export enum MCPDiscoveryState {
 export type MCPToolParams = Record<string, unknown>;
 
 /**
+ * Parameters for the open note tool
+ */
+export interface OpenNoteParams {
+  /**
+   * Exact path to the note file
+   */
+  path?: string;
+
+  /**
+   * Note title for lookup (alternative to path)
+   */
+  title?: string;
+
+  /**
+   * How to open the note: tab (current pane), split (new pane), or window (new window)
+   */
+  paneType?: 'tab' | 'split' | 'window';
+
+  /**
+   * Split direction when paneType is "split"
+   */
+  splitDirection?: 'horizontal' | 'vertical';
+
+  /**
+   * Whether to focus the opened note
+   */
+  focus?: boolean;
+
+  /**
+   * View state configuration for the opened note
+   */
+  viewState?: {
+    mode?: 'source' | 'preview' | 'live';
+    line?: number;
+    column?: number;
+  };
+}
+
+/**
  * Search result item
  */
 export interface SearchResult {
