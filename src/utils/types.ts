@@ -242,7 +242,8 @@ export interface ObsiusSettings {
   
   // UI settings
   ui: {
-    language: 'en' | 'ja';
+    interfaceLanguage: 'en' | 'ja';     // Language for UI elements (menus, settings, etc.)
+    chatLanguage: 'auto' | 'en' | 'ja'; // Language for AI responses ('auto' = detect from user input)
     showTimestamps: boolean;
     enableStreaming: boolean;
     autoScroll: boolean;
@@ -421,6 +422,90 @@ export interface TranslationKeys {
     languageDescription: string;
     english: string;
     japanese: string;
+    
+    // Settings sections
+    interfaceSettings: string;
+    providerSettings: string;
+    toolSettings: string;
+    workflowSettings: string;
+    
+    // Language settings
+    interfaceLanguage: string;
+    interfaceLanguageDesc: string;
+    chatLanguage: string;
+    chatLanguageDesc: string;
+    autoDetect: string;
+    
+    // UI settings
+    showTimestamps: string;
+    showTimestampsDesc: string;
+    enableStreaming: string;
+    enableStreamingDesc: string;
+    autoScroll: string;
+    autoScrollDesc: string;
+    
+    // Tool settings
+    enabledTools: string;
+    enabledToolsDesc: string;
+    confirmationRequired: string;
+    confirmationRequiredDesc: string;
+    
+    // Workflow settings
+    maxIterations: string;
+    maxIterationsDesc: string;
+    enableReACT: string;
+    enableReACTDesc: string;
+    enableStateGraph: string;
+    enableStateGraphDesc: string;
+    iterationTimeout: string;
+    iterationTimeoutDesc: string;
+    
+    // Provider settings
+    defaultProvider: string;
+    defaultProviderDesc: string;
+    
+    // Page titles
+    settingsTitle: string;
+    
+    // Provider configuration
+    providerStatus: string;
+    apiKeyConfiguration: string;
+    connected: string;
+    notConfigured: string;
+    verificationFailed: string;
+    apiKeyStored: string;
+    noApiKey: string;
+    unknown: string;
+    
+    // Workflow settings
+    enableStateGraphWorkflow: string;
+    enableStateGraphWorkflowDesc: string;
+    workflowTip: string;
+    resetToDefault: string;
+    
+    // Provider API key descriptions
+    openaiApiKeyDesc: string;
+    anthropicApiKeyDesc: string;
+    googleApiKeyDesc: string;
+    defaultApiKeyDesc: string;
+    
+    // Provider placeholders
+    enterApiKey: string;
+    
+    // Model selection and connection
+    model: string;
+    modelDesc: string;
+    connection: string;
+    connectionDesc: string;
+    disconnect: string;
+    connect: string;
+    
+    // Tool status
+    toolsStatus: string;
+    
+    // Error messages
+    disconnectFailed: string;
+    unknownError: string;
   };
   
   // General

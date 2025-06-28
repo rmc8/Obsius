@@ -104,7 +104,91 @@ const en: TranslationKeys = {
     language: 'Language',
     languageDescription: 'Select interface language',
     english: 'English',
-    japanese: '日本語'
+    japanese: '日本語',
+    
+    // Settings sections
+    interfaceSettings: 'Interface Settings',
+    providerSettings: 'AI Provider Settings',
+    toolSettings: 'Tool Settings',
+    workflowSettings: 'Workflow Settings',
+    
+    // Language settings
+    interfaceLanguage: 'Interface Language',
+    interfaceLanguageDesc: 'Select language for UI elements (menus, settings, etc.)',
+    chatLanguage: 'Chat Language',
+    chatLanguageDesc: 'Language for AI responses (auto = detect from user input)',
+    autoDetect: 'Auto-detect',
+    
+    // UI settings
+    showTimestamps: 'Show Timestamps',
+    showTimestampsDesc: 'Show timestamps in chat messages',
+    enableStreaming: 'Enable Streaming',
+    enableStreamingDesc: 'Stream AI responses in real-time',
+    autoScroll: 'Auto Scroll',
+    autoScrollDesc: 'Automatically scroll to latest messages',
+    
+    // Tool settings
+    enabledTools: 'Enabled Tools',
+    enabledToolsDesc: 'Select which tools the AI can use',
+    confirmationRequired: 'Confirmation Required',
+    confirmationRequiredDesc: 'Tools that require user confirmation before execution',
+    
+    // Workflow settings
+    maxIterations: 'Max Iterations',
+    maxIterationsDesc: 'Maximum workflow iterations (1-100)',
+    enableReACT: 'Enable ReACT',
+    enableReACTDesc: 'Enable ReACT reasoning methodology',
+    enableStateGraph: 'Enable State Graph',
+    enableStateGraphDesc: 'Enable LangGraph-style workflow',
+    iterationTimeout: 'Iteration Timeout',
+    iterationTimeoutDesc: 'Timeout per iteration in seconds (10-300)',
+    
+    // Provider settings
+    defaultProvider: 'Default Provider',
+    defaultProviderDesc: 'Select the default AI provider for chat interactions',
+    
+    // Page titles
+    settingsTitle: 'Obsius AI Agent Settings',
+    
+    // Provider configuration
+    providerStatus: 'Provider Status',
+    apiKeyConfiguration: 'API Key Configuration',
+    connected: 'Connected',
+    notConfigured: 'Not configured',
+    verificationFailed: 'Verification failed',
+    apiKeyStored: 'API key stored but not verified',
+    noApiKey: 'No API key configured',
+    unknown: 'Unknown',
+    
+    // Workflow settings
+    enableStateGraphWorkflow: 'Enable StateGraph Workflow',
+    enableStateGraphWorkflowDesc: 'Enable LangGraph-style state management',
+    workflowTip: 'Tip: For simple tasks like creating notes or searching, use 5-10 iterations. For complex analysis or multi-step operations, use 20-50 iterations.',
+    resetToDefault: 'Reset to default (24)',
+    
+    // Provider API key descriptions
+    openaiApiKeyDesc: 'Get your API key from https://platform.openai.com/api-keys',
+    anthropicApiKeyDesc: 'Get your API key from https://console.anthropic.com/',
+    googleApiKeyDesc: 'Get your API key from https://ai.google.dev/',
+    defaultApiKeyDesc: 'Enter your API key for this provider',
+    
+    // Provider placeholders
+    enterApiKey: 'Enter API key...',
+    
+    // Model selection and connection
+    model: 'Model',
+    modelDesc: 'Select the model to use for this provider',
+    connection: 'Connection',
+    connectionDesc: 'Disconnect and remove API key from secure storage',
+    disconnect: 'Disconnect',
+    connect: 'Connect',
+    
+    // Tool status
+    toolsStatus: '{enabled} tools enabled, {disabled} disabled',
+    
+    // Error messages
+    disconnectFailed: 'Failed to disconnect {provider}',
+    unknownError: 'Unknown error'
   },
   
   general: {
@@ -267,7 +351,91 @@ const ja: TranslationKeys = {
     language: '言語',
     languageDescription: 'インターフェース言語を選択',
     english: 'English',
-    japanese: '日本語'
+    japanese: '日本語',
+    
+    // Settings sections
+    interfaceSettings: 'インターフェース設定',
+    providerSettings: 'AIプロバイダ設定',
+    toolSettings: 'ツール設定',
+    workflowSettings: 'ワークフロー設定',
+    
+    // Language settings
+    interfaceLanguage: 'インターフェース言語',
+    interfaceLanguageDesc: 'UI要素（メニュー、設定など）の言語を選択',
+    chatLanguage: 'チャット言語',
+    chatLanguageDesc: 'AI応答の言語（自動=ユーザー入力から検出）',
+    autoDetect: '自動検出',
+    
+    // UI settings
+    showTimestamps: 'タイムスタンプ表示',
+    showTimestampsDesc: 'チャットメッセージにタイムスタンプを表示',
+    enableStreaming: 'ストリーミング有効',
+    enableStreamingDesc: 'AI応答をリアルタイムでストリーミング',
+    autoScroll: '自動スクロール',
+    autoScrollDesc: '最新メッセージまで自動的にスクロール',
+    
+    // Tool settings
+    enabledTools: '有効なツール',
+    enabledToolsDesc: 'AIが使用できるツールを選択',
+    confirmationRequired: '確認が必要',
+    confirmationRequiredDesc: '実行前にユーザー確認が必要なツール',
+    
+    // Workflow settings
+    maxIterations: '最大反復回数',
+    maxIterationsDesc: 'ワークフローの最大反復回数（1-100）',
+    enableReACT: 'ReACT有効',
+    enableReACTDesc: 'ReACT推論手法を有効にする',
+    enableStateGraph: 'ステートグラフ有効',
+    enableStateGraphDesc: 'LangGraph形式のワークフローを有効にする',
+    iterationTimeout: '反復タイムアウト',
+    iterationTimeoutDesc: '反復あたりのタイムアウト（秒）（10-300）',
+    
+    // Provider settings
+    defaultProvider: 'デフォルトプロバイダ',
+    defaultProviderDesc: 'チャット用のデフォルトAIプロバイダを選択',
+    
+    // Page titles
+    settingsTitle: 'Obsius AIエージェント設定',
+    
+    // Provider configuration
+    providerStatus: 'プロバイダステータス',
+    apiKeyConfiguration: 'APIキー設定',
+    connected: '接続済み',
+    notConfigured: '未設定',
+    verificationFailed: '認証失敗',
+    apiKeyStored: 'APIキーは保存されていますが未認証',
+    noApiKey: 'APIキーが設定されていません',
+    unknown: '不明',
+    
+    // Workflow settings
+    enableStateGraphWorkflow: 'ステートグラフワークフロー有効',
+    enableStateGraphWorkflowDesc: 'LangGraph形式の状態管理を有効にする',
+    workflowTip: 'ヒント: ノート作成や検索等の簡単なタスクには5-10回の反復を使用。複雑な分析や複数ステップの操作には20-50回の反復を使用してください。',
+    resetToDefault: 'デフォルトにリセット (24)',
+    
+    // Provider API key descriptions
+    openaiApiKeyDesc: 'APIキーは https://platform.openai.com/api-keys から取得してください',
+    anthropicApiKeyDesc: 'APIキーは https://console.anthropic.com/ から取得してください',
+    googleApiKeyDesc: 'APIキーは https://ai.google.dev/ から取得してください',
+    defaultApiKeyDesc: 'このプロバイダーのAPIキーを入力してください',
+    
+    // Provider placeholders
+    enterApiKey: 'APIキーを入力...',
+    
+    // Model selection and connection
+    model: 'モデル',
+    modelDesc: 'このプロバイダーで使用するモデルを選択',
+    connection: '接続',
+    connectionDesc: '接続を切断してAPIキーを安全なストレージから削除',
+    disconnect: '切断',
+    connect: '接続',
+    
+    // Tool status
+    toolsStatus: '{enabled}個のツールが有効、{disabled}個が無効',
+    
+    // Error messages
+    disconnectFailed: '{provider}の切断に失敗しました',
+    unknownError: '不明なエラー'
   },
   
   general: {
@@ -338,22 +506,67 @@ const translations: Record<SupportedLanguage, TranslationKeys> = {
 };
 
 /**
- * Current language setting
+ * Current interface language setting
  */
-let currentLanguage: SupportedLanguage = 'en';
+let currentInterfaceLanguage: SupportedLanguage = 'en';
 
 /**
- * Set the current language
+ * Current chat language setting (for AI responses)
  */
-export function setLanguage(language: SupportedLanguage): void {
-  currentLanguage = language;
+let currentChatLanguage: 'auto' | SupportedLanguage = 'auto';
+
+/**
+ * Last detected language from user input
+ */
+let lastDetectedLanguage: SupportedLanguage = 'en';
+
+/**
+ * Set the current interface language
+ */
+export function setInterfaceLanguage(language: SupportedLanguage): void {
+  currentInterfaceLanguage = language;
 }
 
 /**
- * Get the current language
+ * Set the current chat language setting
+ */
+export function setChatLanguage(language: 'auto' | SupportedLanguage): void {
+  currentChatLanguage = language;
+}
+
+/**
+ * Get the current interface language
+ */
+export function getCurrentInterfaceLanguage(): SupportedLanguage {
+  return currentInterfaceLanguage;
+}
+
+/**
+ * Get the current chat language setting
+ */
+export function getCurrentChatLanguage(): 'auto' | SupportedLanguage {
+  return currentChatLanguage;
+}
+
+/**
+ * Get the effective chat language (resolves 'auto' to detected language)
+ */
+export function getEffectiveChatLanguage(): SupportedLanguage {
+  return currentChatLanguage === 'auto' ? lastDetectedLanguage : currentChatLanguage;
+}
+
+/**
+ * Set the current language (legacy compatibility)
+ */
+export function setLanguage(language: SupportedLanguage): void {
+  setInterfaceLanguage(language);
+}
+
+/**
+ * Get the current language (legacy compatibility)
  */
 export function getCurrentLanguage(): SupportedLanguage {
-  return currentLanguage;
+  return getCurrentInterfaceLanguage();
 }
 
 /**
@@ -364,7 +577,7 @@ export function getCurrentLanguage(): SupportedLanguage {
  */
 export function t(keyPath: string, params?: Record<string, string | number>): string {
   const keys = keyPath.split('.');
-  let value: any = translations[currentLanguage];
+  let value: any = translations[currentInterfaceLanguage];
   
   // Navigate through the translation object
   for (const key of keys) {
@@ -372,7 +585,7 @@ export function t(keyPath: string, params?: Record<string, string | number>): st
       value = value[key];
     } else {
       // Fallback to English if key not found
-      console.warn(`Translation key not found: ${keyPath} for language ${currentLanguage}`);
+      console.warn(`Translation key not found: ${keyPath} for language ${currentInterfaceLanguage}`);
       value = translations.en;
       for (const fallbackKey of keys) {
         if (value && typeof value === 'object' && fallbackKey in value) {
@@ -412,19 +625,62 @@ export function getAvailableLanguages(): Array<{ code: SupportedLanguage; name: 
 }
 
 /**
- * Initialize i18n system with language preference
+ * Detect language from user input text
  */
-export function initializeI18n(language?: SupportedLanguage): void {
-  if (language && language in translations) {
-    setLanguage(language);
+export function detectLanguageFromText(text: string): SupportedLanguage {
+  // Japanese character detection: Hiragana, Katakana, Kanji
+  const japaneseRegex = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/;
+  const japaneseChars = (text.match(japaneseRegex) || []).length;
+  const totalChars = text.replace(/\s/g, '').length;
+  
+  // If more than 30% of characters are Japanese, consider it Japanese
+  const isJapanese = totalChars > 0 && (japaneseChars / totalChars > 0.3);
+  
+  const detectedLanguage = isJapanese ? 'ja' : 'en';
+  lastDetectedLanguage = detectedLanguage;
+  
+  return detectedLanguage;
+}
+
+/**
+ * Initialize i18n system with language preferences
+ */
+export function initializeI18n(interfaceLanguage?: SupportedLanguage, chatLanguage?: 'auto' | SupportedLanguage): void {
+  // Handle legacy single-parameter case
+  if (arguments.length === 1 && typeof interfaceLanguage === 'string') {
+    // Legacy mode: set interface language and default chat to auto
+    if (interfaceLanguage && interfaceLanguage in translations) {
+      setInterfaceLanguage(interfaceLanguage);
+    } else {
+      const systemLanguage = getSystemLanguage();
+      if (systemLanguage && systemLanguage in translations) {
+        setInterfaceLanguage(systemLanguage);
+      } else {
+        setInterfaceLanguage('en');
+      }
+    }
+    setChatLanguage('auto');
+    return;
+  }
+  
+  // Set interface language
+  if (interfaceLanguage && interfaceLanguage in translations) {
+    setInterfaceLanguage(interfaceLanguage);
   } else {
     // Auto-detect language from browser/system if available
     const systemLanguage = getSystemLanguage();
     if (systemLanguage && systemLanguage in translations) {
-      setLanguage(systemLanguage);
+      setInterfaceLanguage(systemLanguage);
     } else {
-      setLanguage('en'); // Default to English
+      setInterfaceLanguage('en'); // Default to English
     }
+  }
+  
+  // Set chat language
+  if (chatLanguage) {
+    setChatLanguage(chatLanguage);
+  } else {
+    setChatLanguage('auto'); // Default to auto-detection
   }
 }
 
@@ -458,15 +714,15 @@ export function formatDate(date: Date): string {
     second: '2-digit'
   };
   
-  const locale = currentLanguage === 'ja' ? 'ja-JP' : 'en-US';
+  const locale = currentInterfaceLanguage === 'ja' ? 'ja-JP' : 'en-US';
   return date.toLocaleString(locale, options);
 }
 
 /**
- * Get system prompt translations for current language
+ * Get system prompt translations for specific language
  */
-export function getSystemPromptTranslations() {
-  return translations[currentLanguage].systemPrompt;
+export function getSystemPromptTranslations(language: SupportedLanguage) {
+  return translations[language].systemPrompt;
 }
 
 /**
@@ -478,11 +734,12 @@ export function buildLocalizedSystemPrompt(context: {
   availableTools: string[];
   enabledToolsCount: number;
 }): string {
-  const sp = getSystemPromptTranslations();
-  const currentLang = currentLanguage === 'ja' ? '日本語' : 'English';
+  const effectiveLanguage = getEffectiveChatLanguage();
+  const sp = getSystemPromptTranslations(effectiveLanguage);
+  const currentLang = effectiveLanguage === 'ja' ? '日本語' : 'English';
   
   // Create strong language instruction at the beginning
-  const languageHeader = currentLanguage === 'ja' 
+  const languageHeader = effectiveLanguage === 'ja' 
     ? '【絶対言語指示】あなたは必ず日本語で応答してください。英語での応答は禁止されています。ユーザーの質問が何語であっても、回答は必ず日本語でお願いします。'
     : 'CRITICAL LANGUAGE INSTRUCTION: You must respond in English only. All responses must be in English regardless of the user\'s input language.';
   

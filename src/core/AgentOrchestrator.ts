@@ -17,7 +17,7 @@ import {
   TokenUsage 
 } from '../utils/types';
 import { AIMessage, StreamCallback, StreamChunk } from './providers/BaseProvider';
-import { t, getCurrentLanguage, buildLocalizedSystemPrompt } from '../utils/i18n';
+import { t, getCurrentInterfaceLanguage, getEffectiveChatLanguage, buildLocalizedSystemPrompt } from '../utils/i18n';
 import { WORKFLOW_CONSTANTS } from '../utils/constants';
 import { 
   WorkflowState, 

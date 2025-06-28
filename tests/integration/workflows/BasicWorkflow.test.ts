@@ -46,7 +46,8 @@ describe('Basic Obsius Workflows', () => {
         riskLevels: { low: [], medium: [], high: [] }
       },
       ui: {
-        language: 'en',
+        interfaceLanguage: 'en',
+        chatLanguage: 'auto',
         showTimestamps: true,
         enableStreaming: false,
         autoScroll: true
