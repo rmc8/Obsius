@@ -723,6 +723,79 @@ export class SecureStorage {
   // Removed waitForObsidianDataStability and extractSecureDataWithRetry - no longer needed
 
   /**
+   * Clear all corrupted encrypted data and reset storage
+   */
+  async clearCorruptedData(): Promise<void> {
+    try {
+      console.log('🗑️ Clearing corrupted encrypted data...');
+      
+      // Load plugin data
+      const data = await this.plugin.loadData() || {};
+      
+      // Remove secure storage container
+      if (this.config.dataKey in data) {
+        delete data[this.config.dataKey];
+        console.log(`✅ Removed corrupted container: ${this.config.dataKey}`);
+      }
+      
+      // Save cleaned data
+      await this.plugin.saveData(data);
+      
+      // Clear cache
+      this.clearCache();
+      
+      console.log('✅ Corrupted data cleared successfully');
+    } catch (error) {
+      console.error('❌ Failed to clear corrupted data:', error);
+      throw new Error(`Failed to clear corrupted data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Repair corrupted encryption by clearing and re-initializing
+   */
+  async repairCorruptedEncryption(resetSettingsCallback?: (providers: string[]) => Promise<void>): Promise<boolean> {
+    try {
+      console.log('🔧 Starting corruption repair...');
+      
+      // Check current integrity
+      const integrityResult = await this.performIntegrityCheck();
+      
+      if (integrityResult.success) {
+        console.log('✅ No corruption detected');
+        return true;
+      }
+      
+      console.log('🗑️ Corruption detected, clearing data...');
+      console.log('Issues:', integrityResult.issues);
+      
+      // Track affected providers before clearing
+      const affectedProviders = integrityResult.providers || [];
+      console.log('📋 Affected providers:', affectedProviders);
+      
+      // Clear corrupted data
+      await this.clearCorruptedData();
+      
+      // Reset settings for affected providers if callback provided
+      if (resetSettingsCallback && affectedProviders.length > 0) {
+        console.log('🔄 Resetting provider settings...');
+        await resetSettingsCallback(affectedProviders);
+      }
+      
+      // Verify repair
+      const verifyResult = await this.performIntegrityCheck();
+      const repairSuccess = verifyResult.success || verifyResult.issues.length === 0;
+      
+      console.log(`🔧 Repair ${repairSuccess ? 'successful' : 'failed'}`);
+      return repairSuccess;
+      
+    } catch (error) {
+      console.error('❌ Repair failed:', error);
+      return false;
+    }
+  }
+
+  /**
    * Cleanup resources
    */
   destroy(): void {
