@@ -28,7 +28,7 @@ module.exports = {
   },
   
   // Module name mapping for Obsidian and other modules
-  moduleNameMapping: {
+  moduleNameMapper: {
     '^obsidian$': '<rootDir>/tests/mocks/obsidian.ts',
     '^@/(.*)$': '<rootDir>/src/$1',
     '^tests/(.*)$': '<rootDir>/tests/$1'

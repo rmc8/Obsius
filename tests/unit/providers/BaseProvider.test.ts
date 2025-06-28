@@ -398,7 +398,7 @@ describe('BaseProvider', () => {
       provider.setApiKey('short');
       
       // Mock warning for invalid format
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
       
       mockFetch.mockResolvedValueOnce({
         ok: true,

@@ -3,7 +3,7 @@
  * This class bridges the chat interface, AI providers, and Obsidian tools
  */
 
-import { App } from 'obsidian';
+import { App, TFile } from 'obsidian';
 import { ProviderManager } from './providers/ProviderManager';
 import { ToolRegistry } from '../tools/ToolRegistry';
 import { 
@@ -11,10 +11,25 @@ import {
   ObsidianAction, 
   AssistantResponse, 
   ExecutionContext,
-  ToolResult 
+  ToolResult,
+  ObsiusSettings,
+  SessionStats,
+  TokenUsage 
 } from '../utils/types';
 import { AIMessage, StreamCallback, StreamChunk } from './providers/BaseProvider';
 import { t, getCurrentLanguage, buildLocalizedSystemPrompt } from '../utils/i18n';
+import { WORKFLOW_CONSTANTS } from '../utils/constants';
+import { 
+  WorkflowState, 
+  WorkflowStateFactory, 
+  WorkflowStateManager,
+  WorkflowPhase 
+} from './WorkflowState';
+import { BaseNode } from './workflow/BaseNode';
+import { AnalyzeNode } from './workflow/AnalyzeNode';
+import { SearchNode } from './workflow/SearchNode';
+import { ExecuteNode } from './workflow/ExecuteNode';
+import { WorkflowPersistence } from './WorkflowPersistence';
 
 export interface AgentConfig {
   maxTokens?: number;
@@ -22,6 +37,9 @@ export interface AgentConfig {
   streaming?: boolean;
   tools?: string[];
   providerId?: string;  // Specific provider to use
+  maxIterations?: number;  // Max workflow iterations (default: 24)
+  enableReACT?: boolean;   // Enable ReACT reasoning (default: true)
+  resumeWorkflow?: boolean; // Resume existing workflow if available (default: true)
 }
 
 export interface ConversationContext {
@@ -31,22 +49,6 @@ export interface ConversationContext {
   userId?: string;
 }
 
-export interface TokenUsage {
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
-}
-
-export interface SessionStats {
-  totalTokens: number;
-  totalCost: number;
-  providerStats: Record<string, {
-    tokens: number;
-    cost: number;
-    requests: number;
-  }>;
-  requestCount: number;
-}
 
 /**
  * Main orchestrator for AI agent interactions
@@ -55,6 +57,7 @@ export class AgentOrchestrator {
   private app: App;
   private providerManager: ProviderManager;
   private toolRegistry: ToolRegistry;
+  private settings: ObsiusSettings;
   private conversationHistory: ChatMessage[] = [];
   private sessionStats: SessionStats = {
     totalTokens: 0,
@@ -63,18 +66,36 @@ export class AgentOrchestrator {
     requestCount: 0
   };
 
+  // LangGraph-style workflow management
+  private workflowStates: Map<string, WorkflowState> = new Map();
+  private workflowNodes: Map<string, BaseNode> = new Map();
+  private currentWorkflowId?: string;
+  private workflowPersistence: WorkflowPersistence;
+
   constructor(
     app: App,
     providerManager: ProviderManager,
-    toolRegistry: ToolRegistry
+    toolRegistry: ToolRegistry,
+    settings: ObsiusSettings
   ) {
     this.app = app;
     this.providerManager = providerManager;
     this.toolRegistry = toolRegistry;
+    this.settings = settings;
+    
+    // Initialize workflow persistence
+    this.workflowPersistence = new WorkflowPersistence(app, {
+      enablePersistence: true,
+      storageLocation: 'vault'
+    });
+    
+    // Initialize workflow nodes
+    this.initializeWorkflowNodes();
   }
 
   /**
-   * Process user message and generate AI response with tool execution
+   * Process user message using LangGraph-style StateGraph workflow
+   * Enhanced with ReACT methodology and up to 24 iterations
    */
   async processMessage(
     userInput: string,
@@ -93,36 +114,21 @@ export class AgentOrchestrator {
       this.conversationHistory.push(userMessage);
       context.messages = [...this.conversationHistory];
 
-      // Get AI response
-      const aiResponse = await this.generateAIResponse(userInput, context, config);
+      // Choose execution method based on settings
+      let workflowResult: AssistantResponse;
       
-      // Add assistant message to conversation
-      const assistantMessage: ChatMessage = {
-        id: this.generateMessageId(),
-        timestamp: new Date(),
-        type: 'assistant',
-        content: aiResponse.content,
-        actions: aiResponse.actions
-      };
-
-      this.conversationHistory.push(assistantMessage);
-
-      // Execute any tool calls
-      const executedActions: ObsidianAction[] = [];
-      if (aiResponse.actions && aiResponse.actions.length > 0) {
-        for (const action of aiResponse.actions) {
-          const result = await this.executeAction(action, context);
-          action.result = result;
-          executedActions.push(action);
-        }
+      if (this.settings.workflow.enableStateGraph) {
+        // Use StateGraph workflow
+        workflowResult = await this.executeStateGraphWorkflow(userInput, context, config);
+      } else if (this.settings.workflow.enableReACT) {
+        // Use ReACT methodology without StateGraph
+        workflowResult = await this.executeReACTLoop(userInput, context, config);
+      } else {
+        // Simple direct execution without workflows
+        workflowResult = await this.executeDirectResponse(userInput, context, config);
       }
-
-      return {
-        message: assistantMessage,
-        actions: executedActions,
-        filesCreated: this.extractCreatedFiles(executedActions),
-        filesModified: this.extractModifiedFiles(executedActions)
-      };
+      
+      return workflowResult;
 
     } catch (error) {
       console.error('Agent orchestrator error:', error);
@@ -134,6 +140,752 @@ export class AgentOrchestrator {
         actions: []
       };
     }
+  }
+
+  /**
+   * Initialize workflow nodes for StateGraph execution
+   */
+  private initializeWorkflowNodes(): void {
+    // Initialize core workflow nodes
+    const analyzeNode = new AnalyzeNode({
+      id: 'analyze_node',
+      name: 'Task Analysis',
+      enableTaskDecomposition: true,
+      maxSubtasks: 8
+    });
+
+    const searchNode = new SearchNode({
+      id: 'search_node',
+      name: 'Information Search',
+      maxSearchResults: 10,
+      searchDepth: 'medium',
+      includeContent: true
+    });
+
+    const executeNode = new ExecuteNode({
+      id: 'execute_node',
+      name: 'Action Execution',
+      maxConcurrentActions: 3,
+      enableActionChaining: true,
+      validateBeforeExecution: true
+    });
+
+    // Register nodes
+    this.workflowNodes.set('analyze_node', analyzeNode);
+    this.workflowNodes.set('search_node', searchNode);
+    this.workflowNodes.set('execute_node', executeNode);
+  }
+
+  /**
+   * Execute StateGraph-style workflow with conditional routing
+   */
+  private async executeStateGraphWorkflow(
+    userInput: string,
+    context: ConversationContext,
+    config: AgentConfig
+  ): Promise<AssistantResponse> {
+    const sessionId = context.userId || 'default_session';
+    const vaultName = this.app.vault.getName();
+    
+    // Create or get existing workflow state
+    const workflowState = await this.getOrCreateWorkflowState(sessionId, userInput, vaultName, config);
+    const stateManager = new WorkflowStateManager(workflowState);
+    this.currentWorkflowId = workflowState.workflowId;
+
+    const allExecutedActions: ObsidianAction[] = [];
+    let finalAssistantMessage: ChatMessage | null = null;
+
+    console.log('🔄 Starting StateGraph workflow for:', userInput);
+
+    try {
+      // Quick task complexity assessment
+      const isSimpleTask = this.assessTaskComplexity(userInput);
+      
+      console.log(`📊 Task complexity assessment: ${isSimpleTask ? 'Simple' : 'Complex'}`);
+      console.log(`📝 User input: "${userInput}"`);
+      
+      if (isSimpleTask) {
+        console.log('⚡ Simple task detected - using direct execution');
+        // For simple tasks, skip complex workflow and execute directly
+        const directResult = await this.executeSimpleTask(userInput, workflowState, stateManager, context, config);
+        if (directResult) {
+          return directResult;
+        }
+      } else {
+        console.log('🔄 Complex task detected - using full workflow');
+      }
+
+      // Execute full workflow for complex tasks
+      while (stateManager.nextIteration() && !workflowState.isComplete && !workflowState.isError) {
+        console.log(`📍 Working on: ${workflowState.currentObjective}`);
+        
+        // Create execution context
+        const executionContext = {
+          state: workflowState,
+          stateManager,
+          startTime: new Date(),
+          timeout: this.settings.workflow.iterationTimeout * 1000, // Convert seconds to milliseconds
+          logger: (message: string) => console.log(`[StateGraph] ${message}`),
+          toolExecutor: async (toolName: string, parameters: any) => {
+            // Convert currentFile path to TFile if needed
+            let currentFile: TFile | undefined;
+            if (context.currentFile) {
+              const file = this.app.vault.getAbstractFileByPath(context.currentFile);
+              if (file instanceof TFile) {
+                currentFile = file;
+              }
+            }
+            
+            const executionContext: ExecutionContext = {
+              app: this.app,
+              vaultPath: (this.app.vault.adapter as any).basePath || this.app.vault.getName(),
+              currentFile,
+              workspaceState: context.workspaceState
+            };
+            return await this.executeToolForWorkflow(toolName, parameters, executionContext);
+          }
+        };
+
+        // Determine current node based on phase and routing logic
+        const currentNode = this.determineCurrentNode(workflowState);
+        if (!currentNode) {
+          console.log('❌ No valid node found for current state');
+          break;
+        }
+
+        console.log(`🎯 Executing node: ${currentNode.getConfig().name} (Phase: ${workflowState.currentPhase})`);
+
+        // Execute current node
+        const nodeResult = await currentNode.execute(executionContext);
+        
+        // Update workflow state based on result
+        if (nodeResult.success) {
+          // Collect executed actions
+          allExecutedActions.push(...workflowState.executedActions);
+          
+          // Route to next nodes
+          if (nodeResult.nextNodes && nodeResult.nextNodes.length > 0) {
+            const nextPhase = this.getPhaseForNode(nodeResult.nextNodes[0]);
+            if (nextPhase) {
+              stateManager.transitionToPhase(nextPhase);
+            }
+          } else {
+            // No more nodes to execute - workflow complete
+            stateManager.markComplete(workflowState.confidence);
+            break;
+          }
+        } else {
+          console.log(`❌ Node execution failed: ${nodeResult.error}`);
+          
+          // Handle node failure
+          if (!nodeResult.shouldContinue) {
+            stateManager.markError(nodeResult.error || 'Node execution failed');
+            break;
+          }
+        }
+
+        // Check for completion conditions
+        if (this.checkWorkflowCompletion(workflowState, stateManager)) {
+          console.log('✅ Workflow completion detected');
+          stateManager.markComplete(workflowState.confidence || 0.9);
+          break;
+        }
+
+        // Create checkpoint every few iterations
+        if (workflowState.currentIteration % 3 === 0) {
+          stateManager.createCheckpoint(`Iteration ${workflowState.currentIteration} checkpoint`);
+          
+          // Queue for persistence
+          this.workflowPersistence.queueForPersistence(workflowState);
+        }
+      }
+
+      // If workflow ended but not marked complete, check if we should mark it complete
+      if (!workflowState.isComplete && !workflowState.isError) {
+        const hasSuccessfulActions = workflowState.executedActions.some(a => a.result?.success);
+        if (hasSuccessfulActions) {
+          console.log('✅ Marking workflow complete based on successful actions');
+          stateManager.markComplete(workflowState.confidence || 0.85);
+        }
+      }
+
+      // Generate final assistant message
+      finalAssistantMessage = this.createWorkflowSummaryMessage(workflowState, stateManager);
+
+    } catch (error) {
+      console.error('StateGraph workflow error:', error);
+      stateManager.markError(error instanceof Error ? error.message : 'Unknown workflow error');
+      finalAssistantMessage = this.createErrorMessage(error);
+    }
+
+    // Final persistence of completed workflow
+    await this.workflowPersistence.saveWorkflowState(workflowState);
+    
+    console.log('🏁 Workflow completed');
+
+    return {
+      message: finalAssistantMessage || this.createWorkflowSummaryMessage(workflowState, stateManager),
+      actions: allExecutedActions,
+      filesCreated: this.extractCreatedFiles(allExecutedActions),
+      filesModified: this.extractModifiedFiles(allExecutedActions)
+    };
+  }
+
+  /**
+   * Assess task complexity for routing decisions
+   */
+  private assessTaskComplexity(userInput: string): boolean {
+    const lowercaseInput = userInput.toLowerCase();
+    
+    // Complex task indicators that require full workflow
+    const complexIndicators = [
+      'organize',
+      'analyze',
+      'research',
+      'comprehensive',
+      'detailed',
+      'multiple',
+      'all',
+      'every',
+      'restructure',
+      'migrate'
+    ];
+    
+    // Check for complex indicators
+    const hasComplexIndicators = complexIndicators.some(indicator => 
+      lowercaseInput.includes(indicator)
+    );
+    
+    // Check for multiple actions (and, then)
+    const hasMultipleActions = 
+      (lowercaseInput.match(/\band\b/g) || []).length > 1 ||
+      lowercaseInput.includes(' then ');
+    
+    // Check input length (very long inputs might be complex)
+    const isLongInput = userInput.split(' ').length > 20;
+    
+    // Simple task = NOT complex
+    return !hasComplexIndicators && !hasMultipleActions && !isLongInput;
+  }
+
+  /**
+   * Execute simple task directly without full workflow
+   */
+  private async executeSimpleTask(
+    userInput: string,
+    workflowState: WorkflowState,
+    stateManager: WorkflowStateManager,
+    context: ConversationContext,
+    config: AgentConfig
+  ): Promise<AssistantResponse | null> {
+    try {
+      // Mark workflow as starting
+      stateManager.transitionToPhase('execute');
+      
+      // Simple task execution - get AI response directly
+      const aiResponse = await this.generateAIResponse(userInput, context, config);
+      
+      // Create assistant message
+      const assistantMessage: ChatMessage = {
+        id: this.generateMessageId(),
+        timestamp: new Date(),
+        type: 'assistant',
+        content: aiResponse.content,
+        actions: aiResponse.actions
+      };
+      
+      this.conversationHistory.push(assistantMessage);
+      
+      // Execute any tool calls if present
+      const executedActions: ObsidianAction[] = [];
+      if (aiResponse.actions && aiResponse.actions.length > 0) {
+        for (const action of aiResponse.actions) {
+          const result = await this.executeAction(action, context);
+          action.result = result;
+          executedActions.push(action);
+          
+          // Add to workflow state
+          workflowState.executedActions.push(action);
+          workflowState.actionResults.push(result);
+        }
+      }
+      
+      // Mark as complete
+      stateManager.markComplete(0.9);
+      
+      // Save state
+      await this.workflowPersistence.saveWorkflowState(workflowState);
+      
+      return {
+        message: assistantMessage,
+        actions: executedActions,
+        filesCreated: this.extractCreatedFiles(executedActions),
+        filesModified: this.extractModifiedFiles(executedActions)
+      };
+      
+    } catch (error) {
+      console.error('Simple task execution failed:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get or create workflow state for session
+   */
+  private async getOrCreateWorkflowState(
+    sessionId: string,
+    userInput: string,
+    vaultName: string,
+    config: AgentConfig
+  ): Promise<WorkflowState> {
+    // Try to find existing incomplete workflow for this session
+    if (config.resumeWorkflow !== false) {
+      const persistedWorkflows = await this.workflowPersistence.listPersistedWorkflows(sessionId);
+      const incompleteWorkflow = persistedWorkflows.find(w => 
+        !w.metadata.phase.includes('complete') && 
+        !w.metadata.phase.includes('error')
+      );
+      
+      if (incompleteWorkflow) {
+        console.log(`🔄 Resuming workflow ${incompleteWorkflow.workflowId} from ${incompleteWorkflow.metadata.phase}`);
+        const workflowState = await this.workflowPersistence.loadWorkflowState(incompleteWorkflow.workflowId);
+        if (workflowState) {
+          this.workflowStates.set(workflowState.workflowId, workflowState);
+          return workflowState;
+        }
+      }
+    }
+
+    // Create new workflow state
+    const workflowState = WorkflowStateFactory.createInitialState(
+      sessionId,
+      userInput,
+      vaultName,
+      {
+        maxIterations: config.maxIterations || this.settings.workflow.maxIterations,
+        enablePersistence: true,
+        verboseLogging: false,
+        autoCheckpoint: true
+      }
+    );
+
+    this.workflowStates.set(workflowState.workflowId, workflowState);
+    return workflowState;
+  }
+
+  /**
+   * Determine current node based on workflow state
+   */
+  private determineCurrentNode(workflowState: WorkflowState): BaseNode | null {
+    switch (workflowState.currentPhase) {
+      case 'initialize':
+      case 'analyze':
+        return this.workflowNodes.get('analyze_node') || null;
+      
+      case 'search':
+        return this.workflowNodes.get('search_node') || null;
+      
+      case 'execute':
+        return this.workflowNodes.get('execute_node') || null;
+      
+      case 'reflect':
+        // For now, reflection leads to completion
+        return null;
+      
+      case 'complete':
+      case 'error':
+        return null;
+      
+      default:
+        return this.workflowNodes.get('analyze_node') || null;
+    }
+  }
+
+  /**
+   * Get workflow phase for node name
+   */
+  private getPhaseForNode(nodeName: string): WorkflowPhase | null {
+    switch (nodeName) {
+      case 'analyze_node':
+        return 'analyze';
+      case 'search_node':
+        return 'search';
+      case 'execute_node':
+        return 'execute';
+      case 'reflect_node':
+        return 'reflect';
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * Check if workflow should complete
+   */
+  private checkWorkflowCompletion(workflowState: WorkflowState, stateManager: WorkflowStateManager): boolean {
+    // Early completion for simple tasks
+    if (workflowState.currentIteration === 1 && workflowState.executedActions.length > 0) {
+      const allActionsSuccessful = workflowState.executedActions.every(action => action.result?.success);
+      if (allActionsSuccessful && workflowState.taskPlan) {
+        // Simple task completed in one iteration
+        if (workflowState.taskPlan.estimatedComplexity <= 2) {
+          return true;
+        }
+      }
+    }
+    
+    // Check if all objectives are completed
+    if (workflowState.subObjectives.length > 0) {
+      const allObjectivesCompleted = workflowState.completedObjectives.length >= workflowState.subObjectives.length;
+      if (allObjectivesCompleted) {
+        return true;
+      }
+    }
+    
+    // Check if we've accomplished the main objective
+    const hasSuccessfulActions = workflowState.executedActions.some(action => action.result?.success);
+    const hasHighConfidence = workflowState.confidence > 0.85;
+    const completedMostObjectives = workflowState.completedObjectives.length >= workflowState.subObjectives.length * 0.8;
+    
+    // For tasks without sub-objectives, check if main task seems complete
+    if (workflowState.subObjectives.length === 0 && hasSuccessfulActions) {
+      // Check recent memory for completion signals
+      const recentMemory = stateManager.getMemoryEntries(undefined, undefined, 5);
+      const hasCompletionSignal = recentMemory.some(mem => 
+        mem.content.toLowerCase().includes('completed') ||
+        mem.content.toLowerCase().includes('finished') ||
+        mem.content.toLowerCase().includes('done')
+      );
+      
+      if (hasCompletionSignal || hasHighConfidence) {
+        return true;
+      }
+    }
+    
+    // Standard completion check
+    return hasSuccessfulActions && (hasHighConfidence || completedMostObjectives);
+  }
+
+  /**
+   * Create workflow summary message
+   */
+  private createWorkflowSummaryMessage(workflowState: WorkflowState, stateManager: WorkflowStateManager): ChatMessage {
+    const executedActions = workflowState.executedActions.length;
+    const successfulActions = workflowState.executedActions.filter(a => a.result?.success).length;
+    
+    let summary = '';
+    
+    if (workflowState.isComplete || successfulActions > 0) {
+      // If we have any successful actions, summarize what was done
+      const accomplishments = this.summarizeAccomplishments(workflowState);
+      summary = accomplishments;
+    } else if (workflowState.isError) {
+      summary = `I encountered an issue while working on your request: ${workflowState.errorMessage}`;
+    } else if (executedActions === 0) {
+      // No actions were taken - might be analysis only
+      summary = `I analyzed your request: "${workflowState.originalRequest}"`;
+      if (workflowState.taskPlan) {
+        summary += `\n\nI've identified that this task requires: ${workflowState.taskPlan.requiredTools.join(', ')}.`;
+      }
+    } else {
+      // Fallback - should rarely happen
+      summary = `I processed your request but didn't complete any actions. This might indicate an issue with the workflow.`;
+    }
+
+    return {
+      id: this.generateMessageId(),
+      timestamp: new Date(),
+      type: 'assistant',
+      content: summary
+    };
+  }
+
+  /**
+   * Summarize what was accomplished without mentioning steps
+   */
+  private summarizeAccomplishments(workflowState: WorkflowState): string {
+    const successfulActions = workflowState.executedActions.filter(a => a.result?.success);
+    
+    if (successfulActions.length === 0) {
+      return 'I completed analyzing your request.';
+    }
+    
+    // Group actions by type
+    const actionGroups = new Map<string, number>();
+    successfulActions.forEach(action => {
+      const count = actionGroups.get(action.type) || 0;
+      actionGroups.set(action.type, count + 1);
+    });
+    
+    // Build natural language summary
+    const summaryParts: string[] = [];
+    
+    actionGroups.forEach((count, type) => {
+      switch (type) {
+        case 'create_note':
+          summaryParts.push(`created ${count} note${count > 1 ? 's' : ''}`);
+          break;
+        case 'update_note':
+          summaryParts.push(`updated ${count} note${count > 1 ? 's' : ''}`);
+          break;
+        case 'search_notes':
+          summaryParts.push(`searched for relevant content`);
+          break;
+        case 'read_note':
+          summaryParts.push(`analyzed existing notes`);
+          break;
+        default:
+          summaryParts.push(`performed ${count} ${type} operation${count > 1 ? 's' : ''}`);
+      }
+    });
+    
+    let summary = 'I ';
+    if (summaryParts.length === 1) {
+      summary += summaryParts[0];
+    } else if (summaryParts.length === 2) {
+      summary += `${summaryParts[0]} and ${summaryParts[1]}`;
+    } else {
+      const lastPart = summaryParts.pop();
+      summary += `${summaryParts.join(', ')}, and ${lastPart}`;
+    }
+    
+    summary += '.';
+    
+    // Add specific details if available
+    const createdFiles = workflowState.executedActions
+      .filter(a => a.type === 'create_note' && a.result?.success)
+      .map(a => a.result?.data?.path || a.parameters?.title)
+      .filter(Boolean);
+    
+    if (createdFiles.length > 0) {
+      summary += `\n\nCreated: ${createdFiles.join(', ')}`;
+    }
+    
+    return summary;
+  }
+
+  /**
+   * Execute tool for workflow nodes
+   * Public method to allow workflow nodes to execute tools
+   */
+  public async executeToolForWorkflow(
+    toolName: string,
+    parameters: any,
+    context: ExecutionContext
+  ): Promise<ToolResult> {
+    try {
+      const result = await this.toolRegistry.executeTool(
+        toolName,
+        parameters,
+        {
+          context: context
+        }
+      );
+
+      return result;
+    } catch (error) {
+      console.error(`Tool execution error for ${toolName}:`, error);
+      return {
+        success: false,
+        message: `Tool execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  /**
+   * Execute a single tool
+   */
+  private async executeTool(
+    action: ObsidianAction,
+    context: ConversationContext
+  ): Promise<ToolResult> {
+    try {
+      // Convert currentFile path to TFile if needed
+      let currentFile: TFile | undefined;
+      if (context.currentFile) {
+        const file = this.app.vault.getAbstractFileByPath(context.currentFile);
+        if (file instanceof TFile) {
+          currentFile = file;
+        }
+      }
+      
+      const executionContext: ExecutionContext = {
+        app: this.app,
+        vaultPath: (this.app.vault.adapter as any).basePath || this.app.vault.getName(),
+        currentFile,
+        workspaceState: context.workspaceState
+      };
+      
+      return await this.toolRegistry.executeTool(
+        action.type,
+        action.parameters,
+        {
+          context: executionContext
+        }
+      );
+    } catch (error) {
+      console.error(`Tool execution error for ${action.type}:`, error);
+      return {
+        success: false,
+        message: `Tool execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  /**
+   * Execute direct response without workflow (simple mode)
+   */
+  private async executeDirectResponse(
+    userInput: string,
+    context: ConversationContext,
+    config: AgentConfig
+  ): Promise<AssistantResponse> {
+    try {
+      // Generate AI response
+      const aiResponse = await this.generateAIResponse(userInput, context, config);
+      
+      const assistantMessage: ChatMessage = {
+        id: this.generateMessageId(),
+        timestamp: new Date(),
+        type: 'assistant',
+        content: aiResponse.content
+      };
+      
+      this.conversationHistory.push(assistantMessage);
+      
+      // Execute any tool calls
+      const executedActions: ObsidianAction[] = [];
+      if (aiResponse.actions && aiResponse.actions.length > 0) {
+        for (const action of aiResponse.actions) {
+          const result = await this.executeTool(action, context);
+          executedActions.push({
+            ...action,
+            result
+          });
+        }
+      }
+      
+      return {
+        message: assistantMessage,
+        actions: executedActions
+      };
+    } catch (error) {
+      console.error('Direct response error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Execute ReACT (Reasoning + Acting) loop with iterative thinking
+   * [Legacy method - kept for backwards compatibility]
+   */
+  private async executeReACTLoop(
+    userInput: string,
+    context: ConversationContext,
+    config: AgentConfig
+  ): Promise<AssistantResponse> {
+    const maxIterations = config.maxIterations || WORKFLOW_CONSTANTS.MAX_ITERATIONS;
+    const allExecutedActions: ObsidianAction[] = [];
+    let workingMemory: string[] = [`User Request: ${userInput}`];
+    let finalAssistantMessage: ChatMessage | null = null;
+    let isTaskCompleted = false;
+
+    console.log('🔄 Starting ReACT loop for:', userInput);
+
+    for (let iteration = 0; iteration < maxIterations && !isTaskCompleted; iteration++) {
+      console.log(`📍 ReACT Iteration ${iteration + 1}/${maxIterations}`);
+      
+      try {
+        // Build reasoning context with working memory
+        const reasoningContext = this.buildReasoningContext(workingMemory, context);
+        
+        // Generate AI reasoning and potential actions
+        const aiResponse = await this.generateReasoningResponse(reasoningContext, config);
+        
+        // Create assistant message for this iteration
+        const assistantMessage: ChatMessage = {
+          id: this.generateMessageId(),
+          timestamp: new Date(),
+          type: 'assistant',
+          content: aiResponse.content,
+          actions: aiResponse.actions
+        };
+
+        // Check if this is the final response (no more actions needed)
+        if (!aiResponse.actions || aiResponse.actions.length === 0) {
+          console.log('✅ Task completed - no more actions needed');
+          finalAssistantMessage = assistantMessage;
+          isTaskCompleted = true;
+          break;
+        }
+
+        // Execute actions and gather observations
+        const iterationActions: ObsidianAction[] = [];
+        for (const action of aiResponse.actions) {
+          console.log(`🔧 Executing action: ${action.type}`);
+          
+          const result = await this.executeAction(action, context);
+          action.result = result;
+          iterationActions.push(action);
+          allExecutedActions.push(action);
+
+          // Add observation to working memory
+          const observation = this.formatObservation(action, result);
+          workingMemory.push(observation);
+          
+          console.log(`📋 Observation: ${observation}`);
+        }
+
+        // Add reasoning step to working memory
+        workingMemory.push(`Iteration ${iteration + 1} Thinking: ${aiResponse.content}`);
+
+        // Update conversation history
+        this.conversationHistory.push(assistantMessage);
+
+        // Check if task seems completed based on results
+        if (this.assessTaskCompletion(iterationActions, userInput)) {
+          console.log('✅ Task completed based on successful actions');
+          finalAssistantMessage = assistantMessage;
+          isTaskCompleted = true;
+        }
+
+      } catch (error) {
+        console.error(`❌ Error in ReACT iteration ${iteration + 1}:`, error);
+        workingMemory.push(`Error in iteration ${iteration + 1}: ${error}`);
+        
+        // Continue to next iteration or break if critical error
+        if (iteration === maxIterations - 1) {
+          finalAssistantMessage = {
+            id: this.generateMessageId(),
+            timestamp: new Date(),
+            type: 'assistant',
+            content: `I encountered an error while working on your request: ${error}. I've completed what I could.`
+          };
+        }
+      }
+    }
+
+    // If we didn't get a final message, create a summary
+    if (!finalAssistantMessage) {
+      const summary = this.createTaskSummary(allExecutedActions, workingMemory);
+      finalAssistantMessage = {
+        id: this.generateMessageId(),
+        timestamp: new Date(),
+        type: 'assistant',
+        content: summary
+      };
+    }
+
+    console.log('🏁 ReACT loop completed');
+
+    return {
+      message: finalAssistantMessage,
+      actions: allExecutedActions,
+      filesCreated: this.extractCreatedFiles(allExecutedActions),
+      filesModified: this.extractModifiedFiles(allExecutedActions)
+    };
   }
 
   /**
@@ -766,5 +1518,155 @@ export class AgentOrchestrator {
     }
 
     throw lastError || new Error('Tool execution failed after retries');
+  }
+
+  /**
+   * Build reasoning context for ReACT loop iteration
+   */
+  private buildReasoningContext(workingMemory: string[], context: ConversationContext): ConversationContext {
+    // Create enhanced context with working memory
+    const reasoningMessages: ChatMessage[] = [...context.messages];
+    
+    // Add working memory as context
+    if (workingMemory.length > 1) {
+      const memoryContext = workingMemory.join('\n');
+      reasoningMessages.push({
+        id: this.generateMessageId(),
+        timestamp: new Date(),
+        type: 'assistant',
+        content: `[Working Memory]\n${memoryContext}`
+      });
+    }
+
+    return {
+      ...context,
+      messages: reasoningMessages
+    };
+  }
+
+  /**
+   * Generate AI reasoning response using ReACT methodology
+   */
+  private async generateReasoningResponse(
+    context: ConversationContext,
+    config: AgentConfig
+  ): Promise<{ content: string; actions?: ObsidianAction[] }> {
+    // Use the existing generateAIResponse but with ReACT-enhanced context
+    return await this.generateAIResponse('', context, config);
+  }
+
+  /**
+   * Format observation from action result for working memory
+   */
+  private formatObservation(action: ObsidianAction, result: ToolResult): string {
+    const status = result.success ? '✅' : '❌';
+    const actionDesc = `${status} Action: ${action.type}`;
+    const resultDesc = result.success 
+      ? `Result: ${result.message}${result.data ? ` | Data: ${JSON.stringify(result.data)}` : ''}`
+      : `Error: ${result.error || result.message}`;
+    
+    return `${actionDesc} | ${resultDesc}`;
+  }
+
+  /**
+   * Assess if the task has been completed based on recent actions
+   */
+  private assessTaskCompletion(actions: ObsidianAction[], originalRequest: string): boolean {
+    // Simple heuristics for task completion
+    const allActionsSuccessful = actions.every(action => action.result?.success);
+    
+    // Check if we have at least one successful action
+    const hasSuccessfulAction = actions.some(action => action.result?.success);
+    
+    // For now, we consider task completed if all recent actions were successful
+    // and we have at least one action
+    return allActionsSuccessful && hasSuccessfulAction && actions.length > 0;
+  }
+
+  /**
+   * Create a summary of the task execution for final response
+   */
+  private createTaskSummary(allActions: ObsidianAction[], workingMemory: string[]): string {
+    const successfulActions = allActions.filter(action => action.result?.success);
+    const failedActions = allActions.filter(action => !action.result?.success);
+    
+    let summary = `I've completed working on your request. Here's what I accomplished:\n\n`;
+    
+    if (successfulActions.length > 0) {
+      summary += `✅ **Successful Actions:**\n`;
+      successfulActions.forEach((action, index) => {
+        summary += `${index + 1}. ${action.type}: ${action.result?.message}\n`;
+      });
+      summary += '\n';
+    }
+    
+    if (failedActions.length > 0) {
+      summary += `❌ **Issues Encountered:**\n`;
+      failedActions.forEach((action, index) => {
+        summary += `${index + 1}. ${action.type}: ${action.result?.error || action.result?.message}\n`;
+      });
+      summary += '\n';
+    }
+    
+    summary += `Total actions performed: ${allActions.length}`;
+    
+    return summary;
+  }
+
+  /**
+   * Get workflow persistence statistics
+   */
+  async getWorkflowStats(): Promise<{
+    totalWorkflows: number;
+    totalSize: number;
+    oldestWorkflow?: Date;
+    newestWorkflow?: Date;
+  }> {
+    return await this.workflowPersistence.getStats();
+  }
+
+  /**
+   * Clean up old workflow states
+   */
+  async cleanupOldWorkflows(): Promise<number> {
+    return await this.workflowPersistence.cleanupOldWorkflows();
+  }
+
+  /**
+   * List persisted workflows for a session
+   */
+  async listPersistedWorkflows(sessionId?: string): Promise<any[]> {
+    return await this.workflowPersistence.listPersistedWorkflows(sessionId);
+  }
+
+  /**
+   * Load and resume a specific workflow
+   */
+  async resumeWorkflow(workflowId: string): Promise<WorkflowState | null> {
+    const workflowState = await this.workflowPersistence.loadWorkflowState(workflowId);
+    if (workflowState) {
+      this.workflowStates.set(workflowState.workflowId, workflowState);
+      this.currentWorkflowId = workflowState.workflowId;
+    }
+    return workflowState;
+  }
+
+  /**
+   * Get current workflow state
+   */
+  getCurrentWorkflowState(): WorkflowState | null {
+    if (this.currentWorkflowId) {
+      return this.workflowStates.get(this.currentWorkflowId) || null;
+    }
+    return null;
+  }
+
+  /**
+   * Cleanup resources
+   */
+  destroy(): void {
+    this.workflowPersistence.destroy();
+    this.workflowStates.clear();
+    this.workflowNodes.clear();
   }
 }

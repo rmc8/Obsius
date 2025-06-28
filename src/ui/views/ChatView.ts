@@ -7,7 +7,7 @@ import { ItemView, WorkspaceLeaf } from 'obsidian';
 import ObsiusPlugin from '../../../main';
 import { t, initializeI18n, formatDate, getCommandDescriptions } from '../../utils/i18n';
 import { AgentOrchestrator, ConversationContext } from '../../core/AgentOrchestrator';
-import { AssistantResponse } from '../../utils/types';
+import { AssistantResponse, SessionStats } from '../../utils/types';
 
 export const VIEW_TYPE_OBSIUS_CHAT = 'obsius-chat-view';
 
@@ -44,7 +44,8 @@ export class ChatView extends ItemView {
       this.agentOrchestrator = new AgentOrchestrator(
         this.plugin.app,
         this.plugin.providerManager,
-        this.plugin.toolRegistry
+        this.plugin.toolRegistry,
+        this.plugin.settings
       );
     }
   }
@@ -423,7 +424,7 @@ export class ChatView extends ItemView {
   private displayTokenUsage(): void {
     if (!this.agentOrchestrator) return;
     
-    const stats = this.agentOrchestrator.getSessionStats();
+    const stats: SessionStats = this.agentOrchestrator.getSessionStats();
     const costStr = stats.totalCost > 0 ? ` ($${stats.totalCost.toFixed(4)})` : '';
     this.addOutput(`📊 Session: ${stats.totalTokens} tokens, ${stats.requestCount} requests${costStr}`, 'info');
   }
@@ -595,7 +596,7 @@ export class ChatView extends ItemView {
       return;
     }
 
-    const stats = this.agentOrchestrator.getSessionStats();
+    const stats: SessionStats = this.agentOrchestrator.getSessionStats();
     
     this.addOutput('📊 Token Usage Statistics', 'info');
     this.addOutput(`Total Tokens: ${stats.totalTokens}`);

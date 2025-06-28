@@ -6,7 +6,7 @@
 import { jest } from '@jest/globals';
 
 // Mock global objects that may not be available in test environment
-global.fetch = jest.fn();
+global.fetch = jest.fn() as jest.MockedFunction<typeof fetch>;
 global.console.log = jest.fn();
 global.console.error = jest.fn();
 global.console.warn = jest.fn();
@@ -85,8 +85,25 @@ export const createMockApp = () => ({
   },
   fileManager: {
     generateMarkdownLink: jest.fn()
+  },
+  // Add missing Obsidian App properties for type compatibility
+  keymap: {
+    pushScope: jest.fn(),
+    popScope: jest.fn()
+  },
+  scope: {
+    register: jest.fn(),
+    unregister: jest.fn()
+  },
+  lastEvent: null,
+  loadLocalStorage: jest.fn(),
+  saveLocalStorage: jest.fn(),
+  // Additional common App properties
+  plugins: {
+    plugins: {},
+    enabledPlugins: new Set()
   }
-});
+} as any);
 
 export const createMockExecutionContext = (app = createMockApp()) => ({
   app,

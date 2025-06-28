@@ -1,12 +1,12 @@
-# Obsidian特化ツールセット設計書
+# Obsidian-Specific Tool Set Design Document
 
-## 概要
+## Overview
 
-GeminiCLIのツール設計パターンを参考に、Obsidian特化の包括的なツールセットを設計します。リスク評価、バリデーション、ユーザー確認フローを統合した安全で強力なツールエコシステムを構築します。
+This document designs a comprehensive Obsidian-specific tool set based on the excellent tool design patterns from GeminiCLI. We build a safe and powerful tool ecosystem that integrates risk assessment, validation, and user confirmation flows.
 
-## 起動時表示
+## Startup Display
 
-### ASCIIアートバナー
+### ASCII Art Banner
 
 ```typescript
 // src/utils/banner.ts
@@ -24,27 +24,27 @@ Knowledge Management Powered by AI
 export function displayBanner(version: string = '0.1.0'): void {
   const banner = OBSIUS_BANNER.replace('{VERSION}', version);
   
-  // Obsidianプラグインでは console.log でバナー表示
+  // Display banner in Obsidian plugin using console.log
   console.log('%c' + banner, 'font-family: "Courier New", "Monaco", "Menlo", monospace; font-weight: bold; color: #7c3aed;');
   
-  // 追加情報
+  // Additional information
   console.log('%cReady to assist with your knowledge management! 🚀', 'font-family: monospace; color: #059669;');
   console.log('%cType your instructions in natural language to get started.', 'font-family: monospace; color: #6b7280;');
 }
 ```
 
-### プラグイン起動時の統合
+### Plugin Startup Integration
 
 ```typescript
 // src/main.ts
 export default class ObsiusPlugin extends Plugin {
   async onload() {
-    // 起動バナー表示
+    // Display startup banner
     displayBanner(this.manifest.version);
     
     console.log('🔧 Initializing Obsius components...');
     
-    // 各種初期化...
+    // Initialize various components...
     await this.initializeServices();
     
     console.log('✅ Obsius is ready!');
@@ -52,9 +52,9 @@ export default class ObsiusPlugin extends Plugin {
 }
 ```
 
-## ツールアーキテクチャ設計
+## Tool Architecture Design
 
-### 基底クラス設計
+### Base Class Design
 
 ```typescript
 // src/core/tools/ObsidianBaseTool.ts
@@ -71,7 +71,7 @@ export abstract class ObsidianBaseTool<TParams = unknown, TResult extends ToolRe
     public readonly requiresConfirmation: boolean = false
   ) {}
 
-  // GeminiCLI風のスキーマ定義
+  // GeminiCLI-style schema definition
   get schema(): FunctionDeclaration {
     return {
       name: this.name,
@@ -84,68 +84,68 @@ export abstract class ObsidianBaseTool<TParams = unknown, TResult extends ToolRe
     };
   }
 
-  // バリデーション（GeminiCLIパターン）
+  // Validation (GeminiCLI pattern)
   validateToolParams(params: TParams): string | null {
-    // 1. 基本パラメータ検証
+    // 1. Basic parameter validation
     if (!params || typeof params !== 'object') {
       return 'Invalid parameters: expected object';
     }
 
-    // 2. Obsidianコンテキスト検証
+    // 2. Obsidian context validation
     const contextError = this.validateObsidianContext();
     if (contextError) return contextError;
 
-    // 3. 具象クラス固有の検証
+    // 3. Concrete class specific validation
     return this.validateSpecificParams(params);
   }
 
-  // リスク評価（GeminiCLIパターン）
+  // Risk assessment (GeminiCLI pattern)
   async shouldConfirmExecute(
     params: TParams, 
     signal?: AbortSignal
   ): Promise<ObsidianToolConfirmationDetails | false> {
-    // 低リスクの操作は確認不要
+    // Low risk operations don't require confirmation
     if (this.riskLevel === ToolRiskLevel.LOW && !this.requiresConfirmation) {
       return false;
     }
 
-    // 具象クラスでの詳細確認ロジック
+    // Detailed confirmation logic in concrete class
     return await this.getConfirmationDetails(params);
   }
 
-  // 実行（GeminiCLIパターン）
+  // Execution (GeminiCLI pattern)
   async execute(
     params: TParams, 
     signal?: AbortSignal,
     updateOutput?: (content: string) => void
   ): Promise<TResult> {
     try {
-      // 1. 実行前チェック
+      // 1. Pre-execution checks
       const validationError = this.validateToolParams(params);
       if (validationError) {
         return this.createErrorResult(validationError) as TResult;
       }
 
-      // 2. 実行
+      // 2. Execution
       updateOutput?.(`🔄 Executing ${this.displayName}...`);
       const result = await this.executeImpl(params, signal, updateOutput);
       
-      // 3. 成功結果
+      // 3. Success result
       updateOutput?.(`✅ ${this.displayName} completed successfully`);
       return result;
 
     } catch (error) {
-      // 4. エラーハンドリング
+      // 4. Error handling
       return this.handleExecutionError(error, params) as TResult;
     }
   }
 
-  // 抽象メソッド
+  // Abstract methods
   protected abstract validateSpecificParams(params: TParams): string | null;
   protected abstract getConfirmationDetails(params: TParams): Promise<ObsidianToolConfirmationDetails | false>;
   protected abstract executeImpl(params: TParams, signal?: AbortSignal, updateOutput?: (content: string) => void): Promise<TResult>;
 
-  // ユーティリティメソッド
+  // Utility methods
   protected validateObsidianContext(): string | null {
     if (!this.app) return 'Obsidian app context not available';
     if (!this.vault) return 'Obsidian vault not available';
@@ -179,7 +179,7 @@ export abstract class ObsidianBaseTool<TParams = unknown, TResult extends ToolRe
 }
 ```
 
-### ツールカテゴリと型定義
+### Tool Categories and Type Definitions
 
 ```typescript
 // src/types/tools.ts
@@ -195,10 +195,10 @@ export enum ObsidianToolCategory {
 }
 
 export enum ToolRiskLevel {
-  LOW = 'low',        // 読み取り専用
-  MEDIUM = 'medium',  // ファイル作成・編集
-  HIGH = 'high',      // ファイル削除・大量操作
-  CRITICAL = 'critical' // システム設定変更
+  LOW = 'low',        // Read-only
+  MEDIUM = 'medium',  // File creation/editing
+  HIGH = 'high',      // File deletion/bulk operations
+  CRITICAL = 'critical' // System settings changes
 }
 
 export interface ObsidianToolConfirmationDetails {
@@ -219,16 +219,16 @@ export enum ToolConfirmationOutcome {
 
 export interface ToolResult {
   success: boolean;
-  llmContent: string;      // LLMへのメッセージ
-  returnDisplay: string;   // ユーザー向け表示
-  data?: any;             // 追加データ
-  filesChanged?: string[]; // 変更されたファイル
+  llmContent: string;      // Message for LLM
+  returnDisplay: string;   // Display for user
+  data?: any;             // Additional data
+  filesChanged?: string[]; // Changed files
 }
 ```
 
-## 具体的ツール実装
+## Concrete Tool Implementations
 
-### 1. ノート操作ツール
+### 1. Note Operation Tools
 
 #### CreateNoteTool
 
@@ -317,7 +317,7 @@ export class CreateNoteTool extends ObsidianBaseTool<CreateNoteParams> {
         previewContent: params.content.substring(0, 200) + '...',
         onConfirm: async (outcome) => {
           if (outcome === ToolConfirmationOutcome.PROCEED_ALWAYS) {
-            // 今後同じパターンを自動承認
+            // Auto-approve the same pattern in the future
             console.log('Note overwrite always approved for future operations');
           }
         }
@@ -337,29 +337,29 @@ export class CreateNoteTool extends ObsidianBaseTool<CreateNoteParams> {
     updateOutput?.(`📝 Creating note "${params.title}"...`);
 
     try {
-      // 1. フォルダ作成（必要に応じて）
+      // 1. Create folder if needed
       if (params.folder) {
         await this.ensureFolderExists(params.folder);
       }
 
-      // 2. コンテンツ準備
+      // 2. Prepare content
       let finalContent = params.content;
       
-      // テンプレート適用
+      // Apply template
       if (params.template) {
         finalContent = await this.applyTemplate(params.template, finalContent, params);
       }
 
-      // タグ追加（フロントマター形式）
+      // Add tags (frontmatter format)
       if (params.tags && params.tags.length > 0) {
         finalContent = this.addFrontmatterTags(finalContent, params.tags);
       }
 
-      // 3. ファイル作成
+      // 3. Create file
       updateOutput?.(`💾 Writing to ${notePath}...`);
       const file = await this.vault.create(notePath, finalContent);
 
-      // 4. 作成後アクション
+      // 4. Post-creation actions
       if (params.openAfterCreation) {
         updateOutput?.(`📖 Opening note...`);
         const leaf = this.app.workspace.getLeaf();
@@ -400,20 +400,20 @@ export class CreateNoteTool extends ObsidianBaseTool<CreateNoteParams> {
   }
 
   private async applyTemplate(templateName: string, content: string, params: CreateNoteParams): Promise<string> {
-    // テンプレート機能の実装
-    // Obsidianのテンプレートプラグインとの統合
+    // Template feature implementation
+    // Integration with Obsidian's template plugin
     try {
       const templateFile = this.vault.getAbstractFileByPath(`Templates/${templateName}.md`);
       if (templateFile && templateFile instanceof TFile) {
         const templateContent = await this.vault.read(templateFile);
         
-        // 変数置換
+        // Variable substitution
         let processedTemplate = templateContent
           .replace(/{{title}}/g, params.title)
           .replace(/{{date}}/g, new Date().toISOString().split('T')[0])
           .replace(/{{time}}/g, new Date().toLocaleTimeString());
         
-        // コンテンツを指定位置に挿入
+        // Insert content at specified position
         if (processedTemplate.includes('{{content}}')) {
           return processedTemplate.replace(/{{content}}/g, content);
         } else {
@@ -471,7 +471,7 @@ export class ReadNoteTool extends ObsidianBaseTool<ReadNoteParams> {
       app,
       vault,
       ObsidianToolCategory.NOTE_OPERATIONS,
-      ToolRiskLevel.LOW  // 読み取り専用なので低リスク
+      ToolRiskLevel.LOW  // Read-only, so low risk
     );
   }
 
@@ -495,7 +495,7 @@ export class ReadNoteTool extends ObsidianBaseTool<ReadNoteParams> {
   }
 
   protected async getConfirmationDetails(): Promise<ObsidianToolConfirmationDetails | false> {
-    // 読み取り専用操作なので確認不要
+    // Read-only operation, no confirmation needed
     return false;
   }
 
@@ -512,7 +512,7 @@ export class ReadNoteTool extends ObsidianBaseTool<ReadNoteParams> {
     try {
       const content = await this.vault.read(file);
       
-      // セクション指定がある場合
+      // Section-specific reading
       if (params.sectionOnly) {
         const sectionContent = this.extractSection(content, params.sectionOnly);
         if (!sectionContent) {
@@ -531,7 +531,7 @@ export class ReadNoteTool extends ObsidianBaseTool<ReadNoteParams> {
         };
       }
 
-      // メタデータ処理
+      // Metadata processing
       let processedContent = content;
       let metadata: any = {};
 
@@ -541,7 +541,7 @@ export class ReadNoteTool extends ObsidianBaseTool<ReadNoteParams> {
           metadata = cache.frontmatter;
         }
       } else {
-        // フロントマターを除去
+        // Remove frontmatter
         processedContent = this.removeFrontmatter(content);
       }
 
@@ -563,7 +563,7 @@ export class ReadNoteTool extends ObsidianBaseTool<ReadNoteParams> {
   }
 
   private normalizePath(path: string): string {
-    // .md拡張子を追加（必要に応じて）
+    // Add .md extension if needed
     if (!path.endsWith('.md')) {
       path += '.md';
     }
@@ -591,7 +591,7 @@ export class ReadNoteTool extends ObsidianBaseTool<ReadNoteParams> {
         }
         
         if (inSection && level <= currentLevel) {
-          // 同レベル以上の見出しが出現したらセクション終了
+          // End section when same or higher level heading appears
           break;
         }
       }
@@ -616,7 +616,7 @@ export class ReadNoteTool extends ObsidianBaseTool<ReadNoteParams> {
 }
 ```
 
-### 2. 検索・分析ツール
+### 2. Search and Analysis Tools
 
 #### SearchNotesTool
 
@@ -707,7 +707,7 @@ export class SearchNotesTool extends ObsidianBaseTool<SearchNotesParams> {
   }
 
   protected async getConfirmationDetails(): Promise<ObsidianToolConfirmationDetails | false> {
-    return false; // 検索は低リスク操作
+    return false; // Search is a low-risk operation
   }
 
   protected async executeImpl(
@@ -724,12 +724,12 @@ export class SearchNotesTool extends ObsidianBaseTool<SearchNotesParams> {
         caseSensitive: params.caseSensitive || false
       };
 
-      // ファイルリスト取得
+      // Get files to search
       let filesToSearch = this.getFilesToSearch(params);
       
       updateOutput?.(`📁 Found ${filesToSearch.length} files to search...`);
 
-      // 検索実行
+      // Execute search
       const results: SearchResult[] = [];
       let searchedCount = 0;
 
@@ -750,16 +750,16 @@ export class SearchNotesTool extends ObsidianBaseTool<SearchNotesParams> {
           });
         }
 
-        // 制限チェック
+        // Check limit
         if (results.length >= (params.limit || 10)) {
           break;
         }
       }
 
-      // 結果をスコア順にソート
+      // Sort results by score
       results.sort((a, b) => b.score - a.score);
 
-      // 結果の整形
+      // Format results
       const formattedResults = await this.formatSearchResults(results, params);
 
       return {
@@ -788,7 +788,7 @@ export class SearchNotesTool extends ObsidianBaseTool<SearchNotesParams> {
       files = this.vault.getMarkdownFiles();
     }
 
-    // フォルダフィルター
+    // Folder filter
     if (params.folder) {
       const folderPath = params.folder.endsWith('/') ? params.folder : params.folder + '/';
       files = files.filter(file => file.path.startsWith(folderPath));
@@ -801,7 +801,7 @@ export class SearchNotesTool extends ObsidianBaseTool<SearchNotesParams> {
     const matches: SearchMatch[] = [];
     
     try {
-      // タイトル検索
+      // Title search
       if (options.searchType === 'title' || options.searchType === 'both') {
         const titleMatch = this.searchInText(file.basename, options.query, options.caseSensitive);
         if (titleMatch) {
@@ -814,7 +814,7 @@ export class SearchNotesTool extends ObsidianBaseTool<SearchNotesParams> {
         }
       }
 
-      // コンテンツ検索
+      // Content search
       if (options.searchType === 'content' || options.searchType === 'both') {
         const content = await this.vault.read(file);
         const contentMatches = this.searchInContent(content, options.query, options.caseSensitive);
@@ -842,7 +842,7 @@ export class SearchNotesTool extends ObsidianBaseTool<SearchNotesParams> {
     lines.forEach((line, index) => {
       const searchLine = caseSensitive ? line : line.toLowerCase();
       if (searchLine.includes(searchQuery)) {
-        // コンテキスト生成（前後2行）
+        // Generate context (2 lines before and after)
         const contextStart = Math.max(0, index - 2);
         const contextEnd = Math.min(lines.length, index + 3);
         const context = lines.slice(contextStart, contextEnd).join('\n');
@@ -863,14 +863,14 @@ export class SearchNotesTool extends ObsidianBaseTool<SearchNotesParams> {
     let score = 0;
     
     matches.forEach(match => {
-      // タイトルマッチはより高いスコア
+      // Title matches have higher score
       if (match.type === 'title') {
         score += 10;
       } else {
         score += 1;
       }
       
-      // クエリの完全一致はボーナス
+      // Exact query match bonus
       if (match.text.toLowerCase().includes(query.toLowerCase())) {
         score += 5;
       }
@@ -892,7 +892,7 @@ export class SearchNotesTool extends ObsidianBaseTool<SearchNotesParams> {
         lastModified: new Date(result.file.stat.mtime)
       };
 
-      // プレビューコンテンツ生成
+      // Generate preview content
       if (params.includeContent && result.matches.length > 0) {
         const firstMatch = result.matches[0];
         formattedResult.preview = this.generatePreview(firstMatch.context || firstMatch.text);
@@ -974,9 +974,9 @@ interface FormattedSearchResult {
 }
 ```
 
-## ツールレジストリとスケジューラー
+## Tool Registry and Scheduler
 
-### ツールレジストリ
+### Tool Registry
 
 ```typescript
 // src/core/tools/ToolRegistry.ts
@@ -990,10 +990,10 @@ export class ObsidianToolRegistry {
   }
 
   registerTool(tool: ObsidianBaseTool): void {
-    // ツール登録
+    // Register tool
     this.tools.set(tool.name, tool);
     
-    // カテゴリ別登録
+    // Register by category
     if (!this.categories.has(tool.category)) {
       this.categories.set(tool.category, []);
     }
@@ -1014,23 +1014,23 @@ export class ObsidianToolRegistry {
     return Array.from(this.tools.values());
   }
 
-  // Gemini APIフォーマットのツール定義
+  // Gemini API format tool definitions
   getToolDefinitions(): FunctionDeclaration[] {
     return this.getAllTools().map(tool => tool.schema);
   }
 
   private registerDefaultTools(): void {
-    // ノート操作ツール
+    // Note operation tools
     this.registerTool(new CreateNoteTool(this.app, this.vault));
     this.registerTool(new ReadNoteTool(this.app, this.vault));
     this.registerTool(new UpdateNoteTool(this.app, this.vault));
     this.registerTool(new DeleteNoteTool(this.app, this.vault));
 
-    // 検索・分析ツール
+    // Search and analysis tools
     this.registerTool(new SearchNotesTool(this.app, this.vault));
     this.registerTool(new AnalyzeVaultStatsTool(this.app, this.vault));
 
-    // リンク管理ツール
+    // Link management tools
     this.registerTool(new CreateLinkTool(this.app, this.vault));
     this.registerTool(new FindBrokenLinksTool(this.app, this.vault));
 
@@ -1045,4 +1045,4 @@ export class ObsidianToolRegistry {
 }
 ```
 
-このツール設計により、GeminiCLIの優れたパターンを活用しながらObsidian特化の機能を実現できます。起動時のASCIIアートも含めて、技術的でありながらユーザーフレンドリーなエクスペリエンスを提供できます。🚀
+This tool design leverages the excellent patterns from GeminiCLI while implementing Obsidian-specific features. Including the ASCII art at startup, we can provide a technical yet user-friendly experience. 🚀
