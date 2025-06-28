@@ -15,7 +15,8 @@ import {
   GlobTool,
   ListDirectoryTool,
   GrepTool,
-  ShellTool
+  ShellTool,
+  WebFetchTool
 } from './src/tools';
 import { ExecutionContext, ObsiusSettings, SecureProviderConfig } from './src/utils/types';
 import { ProviderManager } from './src/core/providers/ProviderManager';
@@ -52,10 +53,10 @@ const DEFAULT_SETTINGS: ObsiusSettings = {
   },
   defaultProvider: 'openai',
   tools: {
-    enabled: ['create_note', 'read_note', 'search_notes', 'update_note', 'glob', 'list_directory', 'grep', 'shell'],
+    enabled: ['create_note', 'read_note', 'search_notes', 'update_note', 'glob', 'list_directory', 'grep', 'shell', 'web_fetch'],
     confirmationRequired: ['update_note'],
     riskLevels: {
-      low: ['create_note', 'read_note', 'search_notes', 'glob', 'list_directory', 'grep'],
+      low: ['create_note', 'read_note', 'search_notes', 'glob', 'list_directory', 'grep', 'web_fetch'],
       medium: ['update_note', 'shell'],
       high: []
     }
@@ -610,6 +611,13 @@ export default class ObsiusPlugin extends Plugin {
       riskLevel: 'medium',
       category: 'system',
       enabled: this.settings.tools.enabled.includes('shell')
+    });
+
+    this.toolRegistry.registerTool('web_fetch', WebFetchTool, {
+      description: 'Fetch and process web content from URLs for research and knowledge management',
+      riskLevel: 'low',
+      category: 'web',
+      enabled: this.settings.tools.enabled.includes('web_fetch')
     });
 
     console.log('Tool registry initialized with', this.toolRegistry.getStats());

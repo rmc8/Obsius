@@ -11,6 +11,7 @@ export { GlobTool } from './GlobTool';
 export { ListDirectoryTool } from './ListDirectoryTool';
 export { GrepTool } from './GrepTool';
 export { ShellTool } from './ShellTool';
+export { WebFetchTool } from './WebFetchTool';
 
 // Re-export types for convenience
 export type {
@@ -22,6 +23,7 @@ export type {
   ListDirectoryParams,
   GrepParams,
   ShellParams,
+  WebFetchParams,
   FileEntry,
   GrepMatch,
   SearchResult,

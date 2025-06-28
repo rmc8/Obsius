@@ -17,7 +17,8 @@ export {
   GlobTool,
   ListDirectoryTool,
   GrepTool,
-  ShellTool
+  ShellTool,
+  WebFetchTool
 } from './obsidian';
 
 // Re-export types
@@ -30,6 +31,7 @@ export type {
   ListDirectoryParams,
   GrepParams,
   ShellParams,
+  WebFetchParams,
   FileEntry,
   GrepMatch,
   SearchResult,

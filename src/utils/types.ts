@@ -251,6 +251,26 @@ export interface ShellParams {
 }
 
 /**
+ * Parameters for the web fetch tool
+ */
+export interface WebFetchParams {
+  /**
+   * The URL to fetch content from
+   */
+  url: string;
+
+  /**
+   * Optional prompt for processing the fetched content
+   */
+  prompt?: string;
+
+  /**
+   * Request timeout in milliseconds (default: 10000)
+   */
+  timeout?: number;
+}
+
+/**
  * Search result item
  */
 export interface SearchResult {
