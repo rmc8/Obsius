@@ -315,6 +315,84 @@ export interface EditParams {
   expected_replacements?: number;
 }
 
+// ============================================================================
+// MCP (Model Context Protocol) Types
+// ============================================================================
+
+/**
+ * MCP Server configuration
+ */
+export interface MCPServerConfig {
+  /**
+   * Command to execute for Stdio transport
+   */
+  command?: string;
+
+  /**
+   * Command arguments for Stdio transport
+   */
+  args?: string[];
+
+  /**
+   * Environment variables for the server process
+   */
+  env?: Record<string, string>;
+
+  /**
+   * Working directory for Stdio transport
+   */
+  cwd?: string;
+
+  /**
+   * SSE endpoint URL
+   */
+  url?: string;
+
+  /**
+   * HTTP streaming endpoint URL
+   */
+  httpUrl?: string;
+
+  /**
+   * Request timeout in milliseconds (default: 600,000ms = 10 minutes)
+   */
+  timeout?: number;
+
+  /**
+   * When true, bypasses all tool call confirmations for this server
+   */
+  trust?: boolean;
+}
+
+/**
+ * MCP Server connection status
+ */
+export enum MCPServerStatus {
+  /** Server is disconnected or experiencing errors */
+  DISCONNECTED = 'disconnected',
+  /** Server is in the process of connecting */
+  CONNECTING = 'connecting',
+  /** Server is connected and ready to use */
+  CONNECTED = 'connected',
+}
+
+/**
+ * Overall MCP discovery state
+ */
+export enum MCPDiscoveryState {
+  /** Discovery has not started yet */
+  NOT_STARTED = 'not_started',
+  /** Discovery is currently in progress */
+  IN_PROGRESS = 'in_progress',
+  /** Discovery has completed (with or without errors) */
+  COMPLETED = 'completed',
+}
+
+/**
+ * MCP tool parameters (generic record for external tools)
+ */
+export type MCPToolParams = Record<string, unknown>;
+
 /**
  * Search result item
  */
@@ -462,6 +540,14 @@ export interface ObsiusSettings {
     enableReACT: boolean;         // Enable ReACT reasoning methodology
     enableStateGraph: boolean;    // Enable LangGraph-style workflow
     iterationTimeout: number;     // Timeout per iteration in seconds (10-300)
+  };
+
+  // MCP settings
+  mcp: {
+    enabled: boolean;             // Enable MCP functionality
+    servers: Record<string, MCPServerConfig>; // MCP server configurations
+    autoDiscovery: boolean;       // Auto-discover tools on startup
+    defaultTimeout: number;       // Default timeout for MCP operations (ms)
   };
 }
 

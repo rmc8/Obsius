@@ -80,6 +80,12 @@ const DEFAULT_SETTINGS: ObsiusSettings = {
     enableReACT: true,
     enableStateGraph: true,
     iterationTimeout: 30
+  },
+  mcp: {
+    enabled: false,
+    servers: {},
+    autoDiscovery: false,
+    defaultTimeout: 600000
   }
 };
 

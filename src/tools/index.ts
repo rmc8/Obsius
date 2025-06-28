@@ -8,6 +8,11 @@ export { BaseTool } from './BaseTool';
 export { ToolRegistry } from './ToolRegistry';
 export type { ToolConstructor, ToolMetadata, ToolExecutionOptions } from './ToolRegistry';
 
+// MCP (Model Context Protocol) system
+export { MCPClient, DiscoveredMCPTool } from '../core/mcp';
+export type { MCPServerConfig, MCPToolParams } from '../utils/types';
+export { MCPServerStatus, MCPDiscoveryState } from '../utils/types';
+
 // Obsidian tools
 export {
   CreateNoteTool,

@@ -24,7 +24,9 @@
 	"author": "Obsius Project Contributors",
 	"license": "MIT",
 	"dependencies": {
+		"@modelcontextprotocol/sdk": "^1.0.3",
 		"glob": "^8.1.0",
+		"shell-quote": "^1.8.1",
 		"zod": "^3.22.4"
 	},
 	"devDependencies": {
@@ -32,6 +34,7 @@
 		"@types/glob": "^8.1.0",
 		"@types/jest": "^30.0.0",
 		"@types/node": "^16.11.6",
+		"@types/shell-quote": "^1.7.5",
 		"@typescript-eslint/eslint-plugin": "5.29.0",
 		"@typescript-eslint/parser": "5.29.0",
 		"builtin-modules": "3.3.0",
