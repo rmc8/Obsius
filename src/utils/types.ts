@@ -400,6 +400,39 @@ export interface TranslationKeys {
     no: string;
   };
 
+  // System Prompts
+  systemPrompt: {
+    intro: string;
+    coreValues: string;
+    contextFirst: string;
+    smartConnections: string;
+    noDuplication: string;
+    respectStructure: string;
+    enhanceDiscovery: string;
+    workflow: string;
+    workflowSteps: {
+      explore: string;
+      connect: string;
+      structure: string;
+      create: string;
+      integrate: string;
+    };
+    environment: string;
+    responseRules: string;
+    responseGuidelines: string;
+    examples: string;
+    exampleProductivity: {
+      user: string;
+      assistant: string;
+    };
+    exampleOrganize: {
+      user: string;
+      assistant: string;
+    };
+    remember: string;
+    languageInstruction: string;
+  };
+
   // Error Messages
   errors: {
     authentication: {

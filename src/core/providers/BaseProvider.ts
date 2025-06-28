@@ -262,7 +262,7 @@ export abstract class BaseProvider {
       console.error(`   3. Try re-entering API key in plugin settings`);
       console.error(`   4. Check console for SecureStorage errors`);
       
-      throw new Error(`API key not set for ${this.providerId}. Please check plugin settings and re-enter API key.`);
+      throw new Error(`API key not set for ${this.providerId}. Try: 1) /repair command to fix corruption, 2) /settings to re-enter API key, or 3) restart Obsidian.`);
     }
     
     // Validate API key format if possible

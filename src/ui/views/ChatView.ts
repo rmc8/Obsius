@@ -219,7 +219,7 @@ export class ChatView extends ItemView {
    */
   private handleTabCompletion(): void {
     const value = this.currentInput.value;
-    const commands = ['/help', '/clear', '/provider', '/settings', '/status'];
+    const commands = ['/help', '/clear', '/provider', '/settings', '/status', '/tokens', '/repair'];
     
     const matches = commands.filter(cmd => cmd.startsWith(value));
     if (matches.length === 1) {
@@ -270,6 +270,12 @@ export class ChatView extends ItemView {
         break;
       case 'status':
         this.showStatus();
+        break;
+      case 'tokens':
+        this.showTokenStats();
+        break;
+      case 'repair':
+        await this.repairEncryption();
         break;
       default:
         this.addOutput(t('commands.unknown.error', { command }), 'error');
@@ -344,9 +350,13 @@ export class ChatView extends ItemView {
   private async sendStreamingChatMessage(message: string, context: ConversationContext): Promise<void> {
     console.log('🔄 Starting streaming chat message processing');
     
+    // Show processing indicator
+    const processingLine = this.addOutput('🤔 Thinking...', 'info');
+    
     // Create streaming output line
     const streamingLine = this.addOutput('', 'normal');
     let accumulatedContent = '';
+    let isFirstChunk = true;
     
     // Process message with streaming AI
     const response = await this.agentOrchestrator!.processMessageStreaming(
@@ -354,6 +364,13 @@ export class ChatView extends ItemView {
       context,
       (chunk) => {
         console.log('📦 Received chunk:', chunk);
+        
+        // Remove processing indicator on first content
+        if (isFirstChunk && chunk.content && processingLine.parentNode) {
+          processingLine.parentNode.removeChild(processingLine);
+          isFirstChunk = false;
+        }
+        
         if (chunk.content) {
           accumulatedContent += chunk.content;
           streamingLine.textContent = accumulatedContent;
@@ -373,6 +390,7 @@ export class ChatView extends ItemView {
     
     console.log('📋 Final response:', response);
     this.displayActionResults(response);
+    this.displayTokenUsage();
   }
 
   /**
@@ -396,6 +414,18 @@ export class ChatView extends ItemView {
     this.addOutput(response.message.content);
     
     this.displayActionResults(response);
+    this.displayTokenUsage();
+  }
+
+  /**
+   * Display token usage information
+   */
+  private displayTokenUsage(): void {
+    if (!this.agentOrchestrator) return;
+    
+    const stats = this.agentOrchestrator.getSessionStats();
+    const costStr = stats.totalCost > 0 ? ` ($${stats.totalCost.toFixed(4)})` : '';
+    this.addOutput(`📊 Session: ${stats.totalTokens} tokens, ${stats.requestCount} requests${costStr}`, 'info');
   }
 
   /**
@@ -475,6 +505,9 @@ export class ChatView extends ItemView {
     commands.forEach(({ command, description }) => {
       this.addOutput(`  ${command.padEnd(10)} ${description}`);
     });
+    // Add tokens command manually for now
+    this.addOutput(`  /tokens    Show detailed token usage statistics`);
+    this.addOutput(`  /repair    Repair corrupted encryption data`);
     this.addOutput('');
     this.addOutput(t('commands.help.chatInstructions'));
   }
@@ -542,6 +575,53 @@ export class ChatView extends ItemView {
     if (stats) {
       this.addOutput(t('commands.status.toolsAvailable', { count: stats.enabled }));
     }
+
+    // Show session token stats
+    if (this.agentOrchestrator) {
+      const sessionStats = this.agentOrchestrator.getSessionStats();
+      this.addOutput(`📊 Session: ${sessionStats.totalTokens} tokens, ${sessionStats.requestCount} requests`);
+      if (sessionStats.totalCost > 0) {
+        this.addOutput(`💰 Estimated cost: $${sessionStats.totalCost.toFixed(4)}`);
+      }
+    }
+  }
+
+  /**
+   * Show detailed token statistics
+   */
+  private showTokenStats(): void {
+    if (!this.agentOrchestrator) {
+      this.addOutput('Token tracking not available', 'error');
+      return;
+    }
+
+    const stats = this.agentOrchestrator.getSessionStats();
+    
+    this.addOutput('📊 Token Usage Statistics', 'info');
+    this.addOutput(`Total Tokens: ${stats.totalTokens}`);
+    this.addOutput(`Total Requests: ${stats.requestCount}`);
+    
+    if (stats.totalCost > 0) {
+      this.addOutput(`Estimated Cost: $${stats.totalCost.toFixed(4)}`);
+    }
+    
+    // Provider breakdown
+    if (Object.keys(stats.providerStats).length > 0) {
+      this.addOutput(''); // Empty line
+      this.addOutput('Provider Breakdown:', 'info');
+      
+      for (const [providerId, providerStat] of Object.entries(stats.providerStats)) {
+        const costStr = providerStat.cost > 0 ? ` ($${providerStat.cost.toFixed(4)})` : '';
+        this.addOutput(`  ${providerId}: ${providerStat.tokens} tokens, ${providerStat.requests} requests${costStr}`);
+      }
+    }
+
+    // Average tokens per request
+    if (stats.requestCount > 0) {
+      const avgTokens = Math.round(stats.totalTokens / stats.requestCount);
+      this.addOutput(''); // Empty line
+      this.addOutput(`Average tokens per request: ${avgTokens}`);
+    }
   }
 
   /**
@@ -602,6 +682,64 @@ export class ChatView extends ItemView {
     
     // Update prompt and placeholder
     this.updatePrompt();
+  }
+
+  /**
+   * Repair corrupted encryption
+   */
+  private async repairEncryption(): Promise<void> {
+    this.addOutput('🔧 Starting encryption repair...', 'info');
+    
+    try {
+      const providerManager = this.plugin.getProviderManager();
+      if (!providerManager) {
+        this.addOutput('❌ Provider manager not available', 'error');
+        return;
+      }
+      
+      // Access secure storage through provider manager
+      const secureStorage = (providerManager as any).secureStorage;
+      if (!secureStorage) {
+        this.addOutput('❌ Secure storage not available', 'error');
+        return;
+      }
+      
+      // Run integrity check first
+      this.addOutput('🔍 Checking encryption integrity...', 'info');
+      const integrityResult = await secureStorage.performIntegrityCheck();
+      
+      if (integrityResult.success) {
+        this.addOutput('✅ No corruption detected', 'success');
+        return;
+      }
+      
+      this.addOutput('❌ Corruption detected:', 'error');
+      integrityResult.issues.forEach((issue: string) => {
+        this.addOutput(`   • ${issue}`, 'error');
+      });
+      
+      // Attempt repair with settings reset
+      this.addOutput('🗑️ Clearing corrupted data...', 'info');
+      const repairSuccess = await secureStorage.repairCorruptedEncryption(
+        async (affectedProviders: string[]) => {
+          this.addOutput(`🔄 Resetting settings for: ${affectedProviders.join(', ')}`, 'info');
+          if (providerManager && (providerManager as any).resetProviderSettings) {
+            await (providerManager as any).resetProviderSettings(affectedProviders);
+          }
+        }
+      );
+      
+      if (repairSuccess) {
+        this.addOutput('✅ Repair successful! Authentication flags have been reset.', 'success');
+        this.addOutput('💡 Use `/settings` to re-enter your API keys', 'info');
+        this.addOutput('🔄 Providers have been reset to unauthenticated state', 'info');
+      } else {
+        this.addOutput('❌ Repair failed. Manual intervention required.', 'error');
+      }
+      
+    } catch (error) {
+      this.addOutput(`❌ Repair error: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+    }
   }
 
   /**

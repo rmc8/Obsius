@@ -466,6 +466,34 @@ export default class ObsiusPlugin extends Plugin {
   }
 
   /**
+   * Get provider manager for external access
+   */
+  public getProviderManager(): ProviderManager | null {
+    return this.providerManager;
+  }
+
+  /**
+   * Save provider settings (called by ProviderManager)
+   */
+  public async saveProviderSettings(): Promise<void> {
+    try {
+      // Update settings from provider configurations
+      if (this.providerManager) {
+        for (const [providerId, registration] of (this.providerManager as any).providers) {
+          if (this.settings.providers[providerId]) {
+            this.settings.providers[providerId] = { ...registration.config };
+          }
+        }
+      }
+      
+      await this.saveSettings();
+      console.log('💾 Provider settings saved successfully');
+    } catch (error) {
+      console.error('❌ Failed to save provider settings:', error);
+    }
+  }
+
+  /**
    * Register ChatView for side panel display
    */
   private registerChatView(): void {

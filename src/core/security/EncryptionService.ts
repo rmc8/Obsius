@@ -177,16 +177,18 @@ export class EncryptionService {
    * Get device fingerprint for master password generation
    */
   private static getDeviceFingerprint(): string {
-    // Create a device fingerprint using available browser/electron APIs
+    // Create a stable device fingerprint using available browser/electron APIs
     const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'node';
     const platform = typeof navigator !== 'undefined' ? navigator.platform : process.platform;
     const language = typeof navigator !== 'undefined' ? navigator.language : 'en';
     
-    // For Electron/Obsidian, we can use additional information
-    const timestamp = Date.now().toString().slice(0, -7); // Truncate for some stability
+    // Use stable system information instead of timestamp
+    const hardwareConcurrency = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency : 4;
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const screenInfo = typeof screen !== 'undefined' ? `${screen.width}x${screen.height}` : '1920x1080';
     
     return createHash('md5')
-      .update(`${userAgent}:${platform}:${language}:${timestamp}`)
+      .update(`${userAgent}:${platform}:${language}:${hardwareConcurrency}:${timezone}:${screenInfo}`)
       .digest('hex');
   }
 

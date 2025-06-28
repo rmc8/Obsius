@@ -55,6 +55,19 @@ export class ProviderManager {
         if (integrityResult.recommendations.length > 0) {
           console.log('📝 Recommendations:', integrityResult.recommendations);
         }
+        
+        // Auto-repair corrupted encryption with settings reset
+        console.log('🔧 Attempting automatic corruption repair...');
+        const repairResult = await this.secureStorage.repairCorruptedEncryption(
+          async (affectedProviders: string[]) => {
+            await this.resetProviderSettings(affectedProviders);
+          }
+        );
+        if (repairResult) {
+          console.log('✅ Automatic repair successful');
+        } else {
+          console.warn('❌ Automatic repair failed - manual intervention required');
+        }
       }
       
       // Load stored API keys and verify them
@@ -115,12 +128,12 @@ export class ProviderManager {
     // Google AI
     const googleProvider = new GoogleProvider({
       name: 'Google AI',
-      defaultModel: 'gemini-pro'
+      defaultModel: 'gemini-1.5-flash'
     });
     
     await this.registerProvider('google', googleProvider, existingConfigs?.google || {
       name: 'Google AI (Gemini)',
-      model: 'gemini-pro',
+      model: 'gemini-1.5-flash',
       enabled: true,
       authenticated: false,
       hasApiKey: false
@@ -1175,6 +1188,35 @@ export class ProviderManager {
       details: diagnostics.details,
       recommendations: diagnostics.details.recommendations
     };
+  }
+
+  /**
+   * Reset provider settings for affected providers
+   */
+  async resetProviderSettings(affectedProviders: string[]): Promise<void> {
+    console.log('🔄 Resetting provider settings for:', affectedProviders);
+    
+    for (const providerId of affectedProviders) {
+      const registration = this.providers.get(providerId);
+      if (registration) {
+        // Reset authentication flags
+        registration.config.authenticated = false;
+        registration.config.hasApiKey = false;
+        registration.config.keyPrefix = undefined;
+        registration.config.lastVerified = undefined;
+        
+        // Clear API key from provider instance
+        registration.provider.clearApiKey();
+        
+        console.log(`✅ Reset settings for provider: ${providerId}`);
+      }
+    }
+    
+    // Save updated configurations through plugin settings
+    if (this.plugin && (this.plugin as any).saveProviderSettings) {
+      await (this.plugin as any).saveProviderSettings();
+      console.log('💾 Provider settings saved after reset');
+    }
   }
 
   /**
