@@ -460,7 +460,7 @@ describe('BaseTool', () => {
 
   describe('Logging and Audit', () => {
     test('should log successful executions', async () => {
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
       
       const params = { message: 'log test' };
       await testTool.execute(params);

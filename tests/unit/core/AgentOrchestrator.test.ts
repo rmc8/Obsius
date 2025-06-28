@@ -63,8 +63,8 @@ describe('AgentOrchestrator', () => {
     orchestrator = new AgentOrchestrator(mockApp, mockProviderManager as any, mockToolRegistry);
     
     // Mock console methods
-    jest.spyOn(console, 'log').mockImplementation();
-    jest.spyOn(console, 'error').mockImplementation();
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -147,8 +147,8 @@ describe('AgentOrchestrator', () => {
       expect(result.message.type).toBe('assistant');
       expect(result.message.content).toBe('I\'ll create a note called "Test Note" for you.');
       expect(result.actions).toHaveLength(1);
-      expect(result.actions[0].type).toBe('create_note');
-      expect(result.actions[0].parameters).toEqual({
+      expect(result.actions![0].type).toBe('create_note');
+      expect(result.actions![0].parameters).toEqual({
         title: 'Test Note',
         content: '# Test Note\n\nThis is a test note.'
       });
@@ -356,7 +356,7 @@ describe('AgentOrchestrator', () => {
       const result = await orchestrator.processMessage(userInput, context);
 
       expect(result.actions).toHaveLength(1);
-      expect(result.actions[0].result?.success).toBe(true);
+      expect(result.actions![0].result?.success).toBe(true);
       expect(mockToolRegistry.executeTool).toHaveBeenCalledWith(
         'create_note',
         { title: 'New Note', content: 'Content' },
@@ -392,8 +392,8 @@ describe('AgentOrchestrator', () => {
       const result = await orchestrator.processMessage(userInput, context);
 
       expect(result.actions).toHaveLength(1);
-      expect(result.actions[0].result?.success).toBe(false);
-      expect(result.actions[0].result?.error).toBe('Invalid parameters');
+      expect(result.actions![0].result?.success).toBe(false);
+      expect(result.actions![0].result?.error).toBe('Invalid parameters');
     });
   });
 

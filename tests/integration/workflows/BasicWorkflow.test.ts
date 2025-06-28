@@ -40,8 +40,8 @@ describe('Basic Obsius Workflows', () => {
     orchestrator = new AgentOrchestrator(mockApp, mockProviderManager as any, mockToolRegistry);
     
     // Mock console methods
-    jest.spyOn(console, 'log').mockImplementation();
-    jest.spyOn(console, 'error').mockImplementation();
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -86,8 +86,8 @@ describe('Basic Obsius Workflows', () => {
 
       expect(result.message.content).toBe('I\'ll create a meeting notes file for you.');
       expect(result.actions).toHaveLength(1);
-      expect(result.actions[0].type).toBe('create_note');
-      expect(result.actions[0].result?.success).toBe(true);
+      expect(result.actions![0].type).toBe('create_note');
+      expect(result.actions![0].result?.success).toBe(true);
       expect(result.filesCreated).toContain('Work/Meeting Notes.md');
     }, 15000);
 
@@ -121,8 +121,8 @@ describe('Basic Obsius Workflows', () => {
       const result = await orchestrator.processMessage(userInput, { messages: [] });
 
       expect(result.actions).toHaveLength(1);
-      expect(result.actions[0].result?.success).toBe(false);
-      expect(result.actions[0].result?.error).toContain('protected folder');
+      expect(result.actions![0].result?.success).toBe(false);
+      expect(result.actions![0].result?.error).toContain('protected folder');
     }, 15000);
   });
 
@@ -163,9 +163,9 @@ describe('Basic Obsius Workflows', () => {
       const result = await orchestrator.processMessage(userInput, { messages: [] });
 
       expect(result.actions).toHaveLength(1);
-      expect(result.actions[0].type).toBe('read_note');
-      expect(result.actions[0].result?.data.content).toContain('Project Plan');
-      expect(result.actions[0].result?.data.metadata.tags).toContain('project');
+      expect(result.actions![0].type).toBe('read_note');
+      expect(result.actions![0].result?.data.content).toContain('Project Plan');
+      expect(result.actions![0].result?.data.metadata.tags).toContain('project');
     }, 15000);
   });
 
@@ -217,9 +217,9 @@ describe('Basic Obsius Workflows', () => {
       const result = await orchestrator.processMessage(userInput, { messages: [] });
 
       expect(result.actions).toHaveLength(1);
-      expect(result.actions[0].type).toBe('search_notes');
-      expect(result.actions[0].result?.data.results).toHaveLength(2);
-      expect(result.actions[0].result?.data.results[0].title).toBe('AI Research Notes');
+      expect(result.actions![0].type).toBe('search_notes');
+      expect(result.actions![0].result?.data.results).toHaveLength(2);
+      expect(result.actions![0].result?.data.results[0].title).toBe('AI Research Notes');
     }, 15000);
   });
 
@@ -279,8 +279,8 @@ describe('Basic Obsius Workflows', () => {
       const searchResult = await orchestrator.processMessage(userInput, { messages: [] });
 
       expect(searchResult.actions).toHaveLength(1);
-      expect(searchResult.actions[0].type).toBe('search_notes');
-      expect(searchResult.actions[0].result?.success).toBe(true);
+      expect(searchResult.actions![0].type).toBe('search_notes');
+      expect(searchResult.actions![0].result?.success).toBe(true);
 
       // Simulate follow-up for creating summary
       mockProvider.addMockResponse({
@@ -306,8 +306,8 @@ describe('Basic Obsius Workflows', () => {
       );
 
       expect(summaryResult.actions).toHaveLength(1);
-      expect(summaryResult.actions[0].type).toBe('create_note');
-      expect(summaryResult.actions[0].result?.success).toBe(true);
+      expect(summaryResult.actions![0].type).toBe('create_note');
+      expect(summaryResult.actions![0].result?.success).toBe(true);
       expect(summaryResult.filesCreated).toContain('Project Management Summary.md');
     }, 20000);
   });

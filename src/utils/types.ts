@@ -403,6 +403,18 @@ export interface TranslationKeys {
   // System Prompts
   systemPrompt: {
     intro: string;
+    
+    // ReACT Methodology
+    reactMethodology: string;
+    reactExplanation: string;
+    reactSteps: {
+      thought: string;
+      action: string;
+      observation: string;
+    };
+    reactInstructions: string;
+    reactExample: string;
+    
     coreValues: string;
     contextFirst: string;
     smartConnections: string;
@@ -426,6 +438,10 @@ export interface TranslationKeys {
       assistant: string;
     };
     exampleOrganize: {
+      user: string;
+      assistant: string;
+    };
+    exampleReact: {
       user: string;
       assistant: string;
     };

@@ -22,6 +22,8 @@ export interface AgentConfig {
   streaming?: boolean;
   tools?: string[];
   providerId?: string;  // Specific provider to use
+  maxIterations?: number;  // Max ReACT iterations (default: 5)
+  enableReACT?: boolean;   // Enable ReACT reasoning (default: true)
 }
 
 export interface ConversationContext {
@@ -74,7 +76,8 @@ export class AgentOrchestrator {
   }
 
   /**
-   * Process user message and generate AI response with tool execution
+   * Process user message using ReACT (Reasoning + Acting) methodology
+   * Implements iterative thinking → action → observation cycles
    */
   async processMessage(
     userInput: string,
@@ -93,36 +96,10 @@ export class AgentOrchestrator {
       this.conversationHistory.push(userMessage);
       context.messages = [...this.conversationHistory];
 
-      // Get AI response
-      const aiResponse = await this.generateAIResponse(userInput, context, config);
+      // Start ReACT loop
+      const reactResult = await this.executeReACTLoop(userInput, context, config);
       
-      // Add assistant message to conversation
-      const assistantMessage: ChatMessage = {
-        id: this.generateMessageId(),
-        timestamp: new Date(),
-        type: 'assistant',
-        content: aiResponse.content,
-        actions: aiResponse.actions
-      };
-
-      this.conversationHistory.push(assistantMessage);
-
-      // Execute any tool calls
-      const executedActions: ObsidianAction[] = [];
-      if (aiResponse.actions && aiResponse.actions.length > 0) {
-        for (const action of aiResponse.actions) {
-          const result = await this.executeAction(action, context);
-          action.result = result;
-          executedActions.push(action);
-        }
-      }
-
-      return {
-        message: assistantMessage,
-        actions: executedActions,
-        filesCreated: this.extractCreatedFiles(executedActions),
-        filesModified: this.extractModifiedFiles(executedActions)
-      };
+      return reactResult;
 
     } catch (error) {
       console.error('Agent orchestrator error:', error);
@@ -134,6 +111,116 @@ export class AgentOrchestrator {
         actions: []
       };
     }
+  }
+
+  /**
+   * Execute ReACT (Reasoning + Acting) loop with iterative thinking
+   */
+  private async executeReACTLoop(
+    userInput: string,
+    context: ConversationContext,
+    config: AgentConfig
+  ): Promise<AssistantResponse> {
+    const maxIterations = config.maxIterations || 5;
+    const allExecutedActions: ObsidianAction[] = [];
+    let workingMemory: string[] = [`User Request: ${userInput}`];
+    let finalAssistantMessage: ChatMessage | null = null;
+    let isTaskCompleted = false;
+
+    console.log('🔄 Starting ReACT loop for:', userInput);
+
+    for (let iteration = 0; iteration < maxIterations && !isTaskCompleted; iteration++) {
+      console.log(`📍 ReACT Iteration ${iteration + 1}/${maxIterations}`);
+      
+      try {
+        // Build reasoning context with working memory
+        const reasoningContext = this.buildReasoningContext(workingMemory, context);
+        
+        // Generate AI reasoning and potential actions
+        const aiResponse = await this.generateReasoningResponse(reasoningContext, config);
+        
+        // Create assistant message for this iteration
+        const assistantMessage: ChatMessage = {
+          id: this.generateMessageId(),
+          timestamp: new Date(),
+          type: 'assistant',
+          content: aiResponse.content,
+          actions: aiResponse.actions
+        };
+
+        // Check if this is the final response (no more actions needed)
+        if (!aiResponse.actions || aiResponse.actions.length === 0) {
+          console.log('✅ Task completed - no more actions needed');
+          finalAssistantMessage = assistantMessage;
+          isTaskCompleted = true;
+          break;
+        }
+
+        // Execute actions and gather observations
+        const iterationActions: ObsidianAction[] = [];
+        for (const action of aiResponse.actions) {
+          console.log(`🔧 Executing action: ${action.type}`);
+          
+          const result = await this.executeAction(action, context);
+          action.result = result;
+          iterationActions.push(action);
+          allExecutedActions.push(action);
+
+          // Add observation to working memory
+          const observation = this.formatObservation(action, result);
+          workingMemory.push(observation);
+          
+          console.log(`📋 Observation: ${observation}`);
+        }
+
+        // Add reasoning step to working memory
+        workingMemory.push(`Iteration ${iteration + 1} Thinking: ${aiResponse.content}`);
+
+        // Update conversation history
+        this.conversationHistory.push(assistantMessage);
+
+        // Check if task seems completed based on results
+        if (this.assessTaskCompletion(iterationActions, userInput)) {
+          console.log('✅ Task completed based on successful actions');
+          finalAssistantMessage = assistantMessage;
+          isTaskCompleted = true;
+        }
+
+      } catch (error) {
+        console.error(`❌ Error in ReACT iteration ${iteration + 1}:`, error);
+        workingMemory.push(`Error in iteration ${iteration + 1}: ${error}`);
+        
+        // Continue to next iteration or break if critical error
+        if (iteration === maxIterations - 1) {
+          finalAssistantMessage = {
+            id: this.generateMessageId(),
+            timestamp: new Date(),
+            type: 'assistant',
+            content: `I encountered an error while working on your request: ${error}. I've completed what I could.`
+          };
+        }
+      }
+    }
+
+    // If we didn't get a final message, create a summary
+    if (!finalAssistantMessage) {
+      const summary = this.createTaskSummary(allExecutedActions, workingMemory);
+      finalAssistantMessage = {
+        id: this.generateMessageId(),
+        timestamp: new Date(),
+        type: 'assistant',
+        content: summary
+      };
+    }
+
+    console.log('🏁 ReACT loop completed');
+
+    return {
+      message: finalAssistantMessage,
+      actions: allExecutedActions,
+      filesCreated: this.extractCreatedFiles(allExecutedActions),
+      filesModified: this.extractModifiedFiles(allExecutedActions)
+    };
   }
 
   /**
@@ -766,5 +853,98 @@ export class AgentOrchestrator {
     }
 
     throw lastError || new Error('Tool execution failed after retries');
+  }
+
+  /**
+   * Build reasoning context for ReACT loop iteration
+   */
+  private buildReasoningContext(workingMemory: string[], context: ConversationContext): ConversationContext {
+    // Create enhanced context with working memory
+    const reasoningMessages: ChatMessage[] = [...context.messages];
+    
+    // Add working memory as context
+    if (workingMemory.length > 1) {
+      const memoryContext = workingMemory.join('\n');
+      reasoningMessages.push({
+        id: this.generateMessageId(),
+        timestamp: new Date(),
+        type: 'assistant',
+        content: `[Working Memory]\n${memoryContext}`
+      });
+    }
+
+    return {
+      ...context,
+      messages: reasoningMessages
+    };
+  }
+
+  /**
+   * Generate AI reasoning response using ReACT methodology
+   */
+  private async generateReasoningResponse(
+    context: ConversationContext,
+    config: AgentConfig
+  ): Promise<{ content: string; actions?: ObsidianAction[] }> {
+    // Use the existing generateAIResponse but with ReACT-enhanced context
+    return await this.generateAIResponse('', context, config);
+  }
+
+  /**
+   * Format observation from action result for working memory
+   */
+  private formatObservation(action: ObsidianAction, result: ToolResult): string {
+    const status = result.success ? '✅' : '❌';
+    const actionDesc = `${status} Action: ${action.type}`;
+    const resultDesc = result.success 
+      ? `Result: ${result.message}${result.data ? ` | Data: ${JSON.stringify(result.data)}` : ''}`
+      : `Error: ${result.error || result.message}`;
+    
+    return `${actionDesc} | ${resultDesc}`;
+  }
+
+  /**
+   * Assess if the task has been completed based on recent actions
+   */
+  private assessTaskCompletion(actions: ObsidianAction[], originalRequest: string): boolean {
+    // Simple heuristics for task completion
+    const allActionsSuccessful = actions.every(action => action.result?.success);
+    
+    // Check if we have at least one successful action
+    const hasSuccessfulAction = actions.some(action => action.result?.success);
+    
+    // For now, we consider task completed if all recent actions were successful
+    // and we have at least one action
+    return allActionsSuccessful && hasSuccessfulAction && actions.length > 0;
+  }
+
+  /**
+   * Create a summary of the task execution for final response
+   */
+  private createTaskSummary(allActions: ObsidianAction[], workingMemory: string[]): string {
+    const successfulActions = allActions.filter(action => action.result?.success);
+    const failedActions = allActions.filter(action => !action.result?.success);
+    
+    let summary = `I've completed working on your request. Here's what I accomplished:\n\n`;
+    
+    if (successfulActions.length > 0) {
+      summary += `✅ **Successful Actions:**\n`;
+      successfulActions.forEach((action, index) => {
+        summary += `${index + 1}. ${action.type}: ${action.result?.message}\n`;
+      });
+      summary += '\n';
+    }
+    
+    if (failedActions.length > 0) {
+      summary += `❌ **Issues Encountered:**\n`;
+      failedActions.forEach((action, index) => {
+        summary += `${index + 1}. ${action.type}: ${action.result?.error || action.result?.message}\n`;
+      });
+      summary += '\n';
+    }
+    
+    summary += `Total actions performed: ${allActions.length}`;
+    
+    return summary;
   }
 }
