@@ -271,6 +271,26 @@ export interface WebFetchParams {
 }
 
 /**
+ * Parameters for the read many files tool
+ */
+export interface ReadManyFilesParams {
+  /**
+   * Array of file paths relative to vault root to read
+   */
+  paths: string[];
+
+  /**
+   * Optional limit on characters read per file
+   */
+  charactersToRead?: number;
+
+  /**
+   * Optional total character limit across all files (default: 150,000)
+   */
+  totalCharacterLimit?: number;
+}
+
+/**
  * Search result item
  */
 export interface SearchResult {

@@ -12,6 +12,7 @@ export { ListDirectoryTool } from './ListDirectoryTool';
 export { GrepTool } from './GrepTool';
 export { ShellTool } from './ShellTool';
 export { WebFetchTool } from './WebFetchTool';
+export { ReadManyFilesTool } from './ReadManyFilesTool';
 
 // Re-export types for convenience
 export type {
@@ -24,6 +25,7 @@ export type {
   GrepParams,
   ShellParams,
   WebFetchParams,
+  ReadManyFilesParams,
   FileEntry,
   GrepMatch,
   SearchResult,

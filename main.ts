@@ -16,7 +16,8 @@ import {
   ListDirectoryTool,
   GrepTool,
   ShellTool,
-  WebFetchTool
+  WebFetchTool,
+  ReadManyFilesTool
 } from './src/tools';
 import { ExecutionContext, ObsiusSettings, SecureProviderConfig } from './src/utils/types';
 import { ProviderManager } from './src/core/providers/ProviderManager';
@@ -53,10 +54,10 @@ const DEFAULT_SETTINGS: ObsiusSettings = {
   },
   defaultProvider: 'openai',
   tools: {
-    enabled: ['create_note', 'read_note', 'search_notes', 'update_note', 'glob', 'list_directory', 'grep', 'shell', 'web_fetch'],
+    enabled: ['create_note', 'read_note', 'search_notes', 'update_note', 'glob', 'list_directory', 'grep', 'shell', 'web_fetch', 'read_many_files'],
     confirmationRequired: ['update_note'],
     riskLevels: {
-      low: ['create_note', 'read_note', 'search_notes', 'glob', 'list_directory', 'grep', 'web_fetch'],
+      low: ['create_note', 'read_note', 'search_notes', 'glob', 'list_directory', 'grep', 'web_fetch', 'read_many_files'],
       medium: ['update_note', 'shell'],
       high: []
     }
@@ -618,6 +619,13 @@ export default class ObsiusPlugin extends Plugin {
       riskLevel: 'low',
       category: 'web',
       enabled: this.settings.tools.enabled.includes('web_fetch')
+    });
+
+    this.toolRegistry.registerTool('read_many_files', ReadManyFilesTool, {
+      description: 'Read multiple files from the vault for batch analysis and processing',
+      riskLevel: 'low',
+      category: 'obsidian',
+      enabled: this.settings.tools.enabled.includes('read_many_files')
     });
 
     console.log('Tool registry initialized with', this.toolRegistry.getStats());
