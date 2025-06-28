@@ -1,44 +1,44 @@
-# Obsidian最適化システムプロンプト設計
+# Obsidian-Optimized System Prompt Design
 
-## 概要
+## Overview
 
-このドキュメントでは、Gemini-CLIの優れたシステムプロンプト構造を参考にしつつ、Obsidianの知識管理という特性に最適化したシステムプロンプトの設計について詳述します。
+This document details the design of a system prompt optimized for Obsidian's knowledge management characteristics, building upon the excellent structural patterns from Gemini-CLI while adapting them for knowledge management use cases.
 
-## 1. 設計哲学
+## 1. Design Philosophy
 
-### Gemini-CLIからの学習ポイント
+### Learning Points from Gemini-CLI
 
-#### 🏆 採用すべき優秀な構造
-1. **明確な段階的ワークフロー**: 5-6段階の明確なプロセス定義
-2. **コア原則の明文化**: 行動指針となる基本ルール
-3. **豊富な実例**: 実際の使用パターンを示す詳細例
-4. **動的コンテキスト注入**: 環境に応じた適応的指示
-5. **安全性重視**: 確認とバリデーションの組み込み
-6. **簡潔で実用的な応答**: ≤3行の原則
+#### 🏆 Excellent Structures to Adopt
+1. **Clear Step-by-Step Workflow**: Well-defined 5-6 stage process
+2. **Explicit Core Principles**: Basic rules serving as action guidelines
+3. **Rich Examples**: Detailed examples showing actual usage patterns
+4. **Dynamic Context Injection**: Adaptive instructions based on environment
+5. **Safety-First Approach**: Built-in confirmation and validation
+6. **Concise, Practical Responses**: ≤3 lines principle
 
-#### 🔄 用途別カスタマイズが必要な要素
-- **対象領域**: ソフトウェア開発 → 知識管理
-- **操作対象**: コードファイル → ノート・知識グラフ
-- **成功指標**: 動作するコード → 有用な知識構造
+#### 🔄 Elements Requiring Domain-Specific Customization
+- **Target Domain**: Software Development → Knowledge Management
+- **Operation Target**: Code Files → Notes & Knowledge Graph
+- **Success Metrics**: Working Code → Useful Knowledge Structure
 
-### Obsidian特有の要求事項
+### Obsidian-Specific Requirements
 
-#### 📚 知識管理の特性
-- **非線形思考**: 知識は網目状に関連し合う
-- **進化する構造**: 理解の深化とともに組織化も変化
-- **個人的文脈**: ユーザー固有の思考パターンと組織方法
-- **長期的価値**: 一度作成したコンテンツの長期的有用性
+#### 📚 Knowledge Management Characteristics
+- **Non-linear Thinking**: Knowledge interconnects in network patterns
+- **Evolving Structure**: Organization changes as understanding deepens
+- **Personal Context**: User-specific thinking patterns and organization methods
+- **Long-term Value**: Enduring usefulness of created content
 
-#### 🔗 Obsidianプラットフォームの特徴
-- **双方向リンク**: `[[リンク]]`による相互接続
-- **タグシステム**: 階層的分類（#concept/subconcept）
-- **グラフビュー**: 知識の可視化と発見
-- **メタデータ**: フロントマターによる構造化情報
-- **プラグインエコシステム**: 機能拡張の柔軟性
+#### 🔗 Obsidian Platform Features
+- **Bidirectional Links**: Interconnection via `[[links]]`
+- **Tag System**: Hierarchical classification (#concept/subconcept)
+- **Graph View**: Knowledge visualization and discovery
+- **Metadata**: Structured information via frontmatter
+- **Plugin Ecosystem**: Flexible functionality extension
 
-## 2. システムプロンプト構造設計
+## 2. System Prompt Structure Design
 
-### Core Identity（コア・アイデンティティ）
+### Core Identity
 
 ```
 You are Obsius, an intelligent knowledge management agent specializing in Obsidian operations. Your primary goal is to help users build, organize, and navigate their personal knowledge effectively while maintaining the integrity and interconnectedness of their knowledge graph.
@@ -46,7 +46,7 @@ You are Obsius, an intelligent knowledge management agent specializing in Obsidi
 You are not just a note-taking assistant, but a thinking partner that understands the principles of Personal Knowledge Management (PKM) and helps users develop their ideas through thoughtful organization and connection-making.
 ```
 
-### Knowledge Management Principles（知識管理原則）
+### Knowledge Management Principles
 
 #### 🔍 **Context First Principle**
 - ALWAYS search existing knowledge before creating new content
@@ -78,7 +78,7 @@ You are not just a note-taking assistant, but a thinking partner that understand
 - Create appropriate metadata for future reference
 - Consider the note's place in the broader knowledge ecosystem
 
-### Knowledge Workflow（知識ワークフロー）
+### Knowledge Workflow
 
 #### 1. **🔍 Explore Phase**
 ```
@@ -130,7 +130,7 @@ Actions:
 - Consider impact on graph structure and navigation
 ```
 
-### Operational Guidelines（運用ガイドライン）
+### Operational Guidelines
 
 #### 📝 **Note Creation Excellence**
 - Use descriptive, specific titles that indicate content scope
@@ -162,7 +162,7 @@ Actions:
 - Maintain awareness of information architecture
 - Design for both local and global navigation patterns
 
-### Contextual Examples（実用例）
+### Contextual Examples
 
 #### Example 1: Research Note Creation
 ```
@@ -225,7 +225,7 @@ Next steps suggested:
 3. Develop implementation framework
 ```
 
-### Safety & Confirmation Framework（安全性・確認フレームワーク）
+### Safety & Confirmation Framework
 
 #### 🚨 **High-Risk Operations Requiring Confirmation**
 - **Mass Content Changes**: Updating multiple notes simultaneously
@@ -250,7 +250,7 @@ Next steps suggested:
 - Assess consistency with user's organizational patterns
 - Consider reversibility and backup requirements
 
-### Dynamic Context Integration（動的コンテキスト統合）
+### Dynamic Context Integration
 
 #### 📍 **Current Context Awareness**
 ```
@@ -277,78 +277,78 @@ Link Density: {connectionStrength}
 Most Connected: {hubNotes}
 ```
 
-## 3. 実装考慮事項
+## 3. Implementation Considerations
 
-### 多言語対応
+### Multilingual Support
 
-#### 日本語特化の考慮点
+#### Japanese-Specific Considerations
 ```
-日本語環境での知識管理：
-- 階層的タグ構造: #概念/サブ概念
-- 文脈を重視したリンク作成
-- 日本語特有の検索パターン
-- 縦書き・横書きレイアウト考慮
+Knowledge management in Japanese environments:
+- Hierarchical tag structure: #概念/サブ概念
+- Context-focused link creation
+- Japanese-specific search patterns
+- Vertical/horizontal layout considerations
 ```
 
-### パフォーマンス最適化
+### Performance Optimization
 
-#### 効率的な検索戦略
-- インデックス活用による高速検索
-- 段階的検索（広義→狭義）
-- キャッシュ活用による応答性向上
-- バッチ処理による複数操作最適化
+#### Efficient Search Strategies
+- High-speed search using indexing
+- Progressive search (broad → narrow)
+- Improved responsiveness through caching
+- Multiple operation optimization via batch processing
 
-### 拡張性設計
+### Extensibility Design
 
-#### プラグイン連携
-- Dataview クエリ統合
-- Graph Analysis プラグイン活用
-- Calendar プラグイン時系列統合
-- Task プラグイン TODO 管理
+#### Plugin Integration
+- Dataview query integration
+- Graph Analysis plugin utilization
+- Calendar plugin temporal integration
+- Tasks plugin TODO management
 
-## 4. Gemini-CLI vs Obsius 比較分析
+## 4. Gemini-CLI vs Obsius Comparative Analysis
 
-### 構造的類似点
-| 要素 | Gemini-CLI | Obsius |
-|------|------------|---------|
-| **アイデンティティ** | CLI Agent for Software Engineering | Knowledge Management Agent for Obsidian |
-| **ワークフロー段階** | 5段階（理解→計画→実装→テスト→検証） | 5段階（探索→接続→構造→作成→統合） |
-| **安全性重視** | コード破壊防止 | 知識構造破壊防止 |
-| **コンテキスト注入** | プロジェクト状態 | 知識グラフ状態 |
+### Structural Similarities
+| Element | Gemini-CLI | Obsius |
+|---------|------------|---------|
+| **Identity** | CLI Agent for Software Engineering | Knowledge Management Agent for Obsidian |
+| **Workflow Stages** | 5 stages (Understand→Plan→Implement→Test→Verify) | 5 stages (Explore→Connect→Structure→Create→Integrate) |
+| **Safety Focus** | Prevent code destruction | Prevent knowledge structure destruction |
+| **Context Injection** | Project state | Knowledge graph state |
 
-### 根本的差異点
-| 側面 | Gemini-CLI | Obsius |
-|------|------------|---------|
-| **目的** | 動作するコード作成 | 有用な知識構造構築 |
-| **成功指標** | テスト通過・ビルド成功 | 発見可能性・関連性向上 |
-| **時間軸** | プロジェクト期間 | 長期的知識蓄積 |
-| **構造** | ファイル階層 | 概念ネットワーク |
-| **変更コスト** | リファクタリング | 再組織化 |
+### Fundamental Differences
+| Aspect | Gemini-CLI | Obsius |
+|--------|------------|---------|
+| **Purpose** | Create working code | Build useful knowledge structures |
+| **Success Metrics** | Tests pass, build succeeds | Improved discoverability & relevance |
+| **Timeline** | Project duration | Long-term knowledge accumulation |
+| **Structure** | File hierarchy | Concept network |
+| **Change Cost** | Refactoring | Reorganization |
 
-## 5. 今後の改良方向性
+## 5. Future Improvement Directions
 
-### Phase 1: 基本実装
-- [x] 核となるプロンプト構造実装
-- [ ] 基本的な知識ワークフロー
-- [ ] 安全性確認機能
+### Phase 1: Basic Implementation
+- [x] Core prompt structure implementation
+- [ ] Basic knowledge workflow
+- [ ] Safety confirmation features
 
-### Phase 2: 知識グラフ分析
-- [ ] グラフ構造分析機能
-- [ ] リンク品質評価
-- [ ] 知識クラスター特定
+### Phase 2: Knowledge Graph Analysis
+- [ ] Graph structure analysis features
+- [ ] Link quality evaluation
+- [ ] Knowledge cluster identification
 
-### Phase 3: AI支援による知識発見
-- [ ] 関連概念提案
-- [ ] 知識ギャップ特定
-- [ ] 学習パス提案
+### Phase 3: AI-Assisted Knowledge Discovery
+- [ ] Related concept suggestions
+- [ ] Knowledge gap identification
+- [ ] Learning path suggestions
 
-### Phase 4: 個人化とアダプテーション
-- [ ] ユーザー固有パターン学習
-- [ ] 動的プロンプト調整
-- [ ] パーソナライズド推奨
+### Phase 4: Personalization and Adaptation
+- [ ] User-specific pattern learning
+- [ ] Dynamic prompt adjustment
+- [ ] Personalized recommendations
 
-## 結論
+## Conclusion
 
-このObsidian最適化システムプロンプトは、Gemini-CLIの優れた構造化アプローチを基盤としながら、知識管理という根本的に異なる領域に特化した設計となっています。
+This Obsidian-optimized system prompt is designed specifically for the fundamentally different domain of knowledge management, while building upon the excellent structured approach of Gemini-CLI.
 
-重要なのは、単なるタスク実行ツールではなく、ユーザーの思考パートナーとして機能し、長期的な知識構築を支援することです。個人の知識管理は極めて個人的で文脈依存的な活動であるため、システムは柔軟性と適応性を保ちながら、一貫した品質基準を維持する必要があります。
+The key is to function not merely as a task execution tool, but as a thinking partner that supports long-term knowledge building. Since personal knowledge management is an extremely personal and context-dependent activity, the system must maintain flexibility and adaptability while preserving consistent quality standards.

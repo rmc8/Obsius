@@ -1,35 +1,35 @@
-# Phase 1: 自立型エージェントシステム設計書
+# Phase 1: Autonomous Agent System Design Document
 
-## 概要
+## Overview
 
-Obsiusは**ユーザーの指示を受けて自立的にタスクを完遂するエージェント**として設計します。自動トリガーは使わず、明確なユーザー指示に基づいて行動します。
+Obsius is designed as **an agent that autonomously completes tasks based on user instructions**. It operates based on explicit user instructions without using automatic triggers.
 
-## エージェント行動モデル
+## Agent Behavior Model
 
-### 🎯 **基本動作パターン**
+### 🎯 **Basic Operation Pattern**
 
-**ユーザー指示 → 計画立案 → 自立実行 → 結果報告**
+**User Instruction → Planning → Autonomous Execution → Result Reporting**
 
 ```typescript
-// 例：「今日の会議ノートを作成して、関連する過去の議事録もリンクして」
+// Example: "Create today's meeting notes and link related past minutes"
 // 
-// 1. ユーザー指示理解
-// 2. エージェントが計画立案：
-//    - 今日の日付で会議ノート作成
-//    - 過去の議事録を検索
-//    - 関連リンクを作成
-//    - 適切なテンプレート適用
-// 3. 自立実行（ユーザーの追加指示なしに完了まで）
-// 4. 結果報告
+// 1. Understand user instruction
+// 2. Agent creates plan:
+//    - Create meeting note with today's date
+//    - Search for past meeting minutes
+//    - Create related links
+//    - Apply appropriate template
+// 3. Autonomous execution (complete without additional user instructions)
+// 4. Report results
 ```
 
-### 🤖 **エージェント実行エンジン**
+### 🤖 **Agent Execution Engine**
 
 ```typescript
 export class AgentExecutor {
   private tools: ObsidianTools;
   private aiProvider: AIProvider;
-  private maxSteps: number = 10; // 無限ループ防止
+  private maxSteps: number = 10; // Prevent infinite loops
   
   async executeTask(userInstruction: string): Promise<TaskResult> {
     const conversation: Message[] = [{
@@ -44,13 +44,13 @@ export class AgentExecutor {
     while (!taskCompleted && step < this.maxSteps) {
       step++;
       
-      // AI に次のアクションを決定させる
+      // Let AI determine the next action
       const response = await this.aiProvider.generateResponse(
         conversation,
         this.tools.getToolDefinitions(),
         {
           systemPrompt: this.getAgentSystemPrompt(),
-          temperature: 0.1 // 安定した判断のため低温度
+          temperature: 0.1 // Low temperature for stable decisions
         }
       );
       
@@ -59,12 +59,12 @@ export class AgentExecutor {
         content: response.content
       });
       
-      // ツール実行判定
+      // Tool execution determination
       if (response.toolCalls && response.toolCalls.length > 0) {
         for (const toolCall of response.toolCalls) {
           const result = await this.executeToolCall(toolCall);
           
-          // 実行ログ記録
+          // Record execution log
           executionLog.push({
             step,
             action: toolCall.function.name,
@@ -73,7 +73,7 @@ export class AgentExecutor {
             timestamp: new Date()
           });
           
-          // 結果をconversationに追加
+          // Add result to conversation
           conversation.push({
             role: 'tool',
             tool_call_id: toolCall.id,
@@ -81,7 +81,7 @@ export class AgentExecutor {
           });
         }
       } else {
-        // ツール実行がない = タスク完了の可能性
+        // No tool execution = Possibly task completed
         taskCompleted = this.isTaskCompleted(response.content);
       }
     }
@@ -95,29 +95,33 @@ export class AgentExecutor {
   }
   
   private getAgentSystemPrompt(): string {
-    return `あなたはObsidianの知識管理を支援する自立型AIエージェントです。
+    return `You are an autonomous AI agent that assists with Obsidian knowledge management.
 
-役割:
-- ユーザーの指示を理解し、完了まで自立的に実行する
-- 必要に応じて複数のツールを組み合わせて使用する
-- 各ステップの理由を説明しながら実行する
-- タスクが完了したら明確に報告する
+Roles:
+- Understand user instructions and execute autonomously until completion
+- Use multiple tools in combination as needed
+- Execute while explaining the reason for each step
+- Report clearly when the task is completed
 
-利用可能なツール:
+Available tools:
 ${this.tools.getToolList()}
 
-重要な指針:
-1. ユーザーの指示を正確に理解する
-2. 計画を立ててから実行する
-3. 各アクションの理由を説明する
-4. エラーが起きたら適切に対処する
-5. 完了時は結果をまとめて報告する
+Important guidelines:
+1. Accurately understand user instructions
+2. Plan before executing
+3. Explain the reason for each action
+4. Handle errors appropriately
+5. Summarize and report results upon completion
 
-タスクが完了したと判断したら、最後に「タスクが完了しました。」と明記してください。`;
+When you determine the task is complete, clearly state "Task completed." at the end.`;
   }
   
   private isTaskCompleted(content: string): boolean {
     const completionPhrases = [
+      'Task completed',
+      'All done',
+      'Work finished',
+      'Task finished',
       'タスクが完了しました',
       'すべて完了しました',
       '作業を終了します',
@@ -131,7 +135,7 @@ ${this.tools.getToolList()}
 }
 ```
 
-### 🛠️ **ツール定義と実行**
+### 🛠️ **Tool Definition and Execution**
 
 ```typescript
 export class ObsidianTools {
@@ -141,89 +145,89 @@ export class ObsidianTools {
     return [
       {
         name: 'create_note',
-        description: '新しいノートを作成する',
+        description: 'Create a new note',
         parameters: {
           type: 'object',
           properties: {
-            title: { type: 'string', description: 'ノートのタイトル' },
-            content: { type: 'string', description: 'ノートの内容' },
-            folder: { type: 'string', description: '作成するフォルダ（オプション）' },
-            template: { type: 'string', description: '使用するテンプレート（オプション）' }
+            title: { type: 'string', description: 'Note title' },
+            content: { type: 'string', description: 'Note content' },
+            folder: { type: 'string', description: 'Folder to create in (optional)' },
+            template: { type: 'string', description: 'Template to use (optional)' }
           },
           required: ['title']
         }
       },
       {
         name: 'search_notes',
-        description: 'ノートを検索する',
+        description: 'Search notes',
         parameters: {
           type: 'object',
           properties: {
-            query: { type: 'string', description: '検索クエリ' },
-            limit: { type: 'number', description: '最大検索結果数', default: 10 },
-            include_content: { type: 'boolean', description: '内容も検索対象にするか', default: true }
+            query: { type: 'string', description: 'Search query' },
+            limit: { type: 'number', description: 'Maximum search results', default: 10 },
+            include_content: { type: 'boolean', description: 'Include content in search', default: true }
           },
           required: ['query']
         }
       },
       {
         name: 'read_note',
-        description: '指定したノートの内容を読み取る',
+        description: 'Read the content of a specified note',
         parameters: {
           type: 'object',
           properties: {
-            path: { type: 'string', description: 'ノートのパス' }
+            path: { type: 'string', description: 'Note path' }
           },
           required: ['path']
         }
       },
       {
         name: 'update_note',
-        description: 'ノートの内容を更新する',
+        description: 'Update note content',
         parameters: {
           type: 'object',
           properties: {
-            path: { type: 'string', description: 'ノートのパス' },
-            content: { type: 'string', description: '新しい内容' },
-            append: { type: 'boolean', description: '既存内容に追記するか', default: false }
+            path: { type: 'string', description: 'Note path' },
+            content: { type: 'string', description: 'New content' },
+            append: { type: 'boolean', description: 'Append to existing content', default: false }
           },
           required: ['path', 'content']
         }
       },
       {
         name: 'create_link',
-        description: 'ノート間にリンクを作成する',
+        description: 'Create links between notes',
         parameters: {
           type: 'object',
           properties: {
-            source_note: { type: 'string', description: 'リンク元ノートのパス' },
-            target_note: { type: 'string', description: 'リンク先ノートのパス' },
-            link_text: { type: 'string', description: 'リンクテキスト（オプション）' },
-            context: { type: 'string', description: 'リンクを挿入する文脈（オプション）' }
+            source_note: { type: 'string', description: 'Source note path' },
+            target_note: { type: 'string', description: 'Target note path' },
+            link_text: { type: 'string', description: 'Link text (optional)' },
+            context: { type: 'string', description: 'Context to insert link (optional)' }
           },
           required: ['source_note', 'target_note']
         }
       },
       {
         name: 'get_vault_structure',
-        description: 'ボルトの構造（フォルダ・ファイル一覧）を取得する',
+        description: 'Get vault structure (folder and file list)',
         parameters: {
           type: 'object',
           properties: {
-            max_depth: { type: 'number', description: '最大探索深度', default: 3 },
-            include_content_summary: { type: 'boolean', description: '各ファイルの要約を含むか', default: false }
+            max_depth: { type: 'number', description: 'Maximum search depth', default: 3 },
+            include_content_summary: { type: 'boolean', description: 'Include file summaries', default: false }
           }
         }
       },
       {
         name: 'apply_template',
-        description: 'テンプレートを適用してノートを作成または更新する',
+        description: 'Apply template to create or update note',
         parameters: {
           type: 'object',
           properties: {
-            template_name: { type: 'string', description: 'テンプレート名' },
-            variables: { type: 'object', description: 'テンプレート変数' },
-            target_note: { type: 'string', description: '対象ノートのパス（新規作成の場合は省略）' }
+            template_name: { type: 'string', description: 'Template name' },
+            variables: { type: 'object', description: 'Template variables' },
+            target_note: { type: 'string', description: 'Target note path (omit for new creation)' }
           },
           required: ['template_name']
         }
@@ -253,31 +257,31 @@ export class ObsidianTools {
         default:
           return {
             success: false,
-            message: `未知のツール: ${name}`
+            message: `Unknown tool: ${name}`
           };
       }
     } catch (error) {
       return {
         success: false,
-        message: `ツール実行エラー (${name}): ${error.message}`
+        message: `Tool execution error (${name}): ${error.message}`
       };
     }
   }
   
-  // 個別ツール実装...
+  // Individual tool implementations...
   private async createNote(args: any): Promise<ToolResult> {
-    // 実装詳細
+    // Implementation details
   }
   
   private async searchNotes(args: any): Promise<ToolResult> {
-    // 実装詳細
+    // Implementation details
   }
   
-  // ... 他のツール実装
+  // ... Other tool implementations
 }
 ```
 
-### 💬 **エージェント実行の可視化**
+### 💬 **Agent Execution Visualization**
 
 ```typescript
 const AgentExecutionView: React.FC<{
@@ -287,15 +291,15 @@ const AgentExecutionView: React.FC<{
   return (
     <div className="agent-execution">
       <div className="execution-header">
-        <h3>🤖 エージェント実行中...</h3>
+        <h3>🤖 Agent executing...</h3>
         <button onClick={onCancel} className="cancel-btn">
-          中止
+          Cancel
         </button>
       </div>
       
       <div className="execution-progress">
         <div className="current-step">
-          ステップ {execution.currentStep} / {execution.maxSteps}
+          Step {execution.currentStep} / {execution.maxSteps}
         </div>
         <div className="progress-bar">
           <div 
@@ -315,7 +319,7 @@ const AgentExecutionView: React.FC<{
         <div className="thinking">
           <div className="thinking-header">
             <Icon name="brain" />
-            思考中...
+            Thinking...
           </div>
           <div className="thinking-content">
             {execution.currentThinking}
@@ -345,13 +349,13 @@ const ExecutionStepDisplay: React.FC<{ step: ExecutionStep }> = ({ step }) => {
         
         {step.result.message && (
           <div className="step-result">
-            <strong>結果:</strong> {step.result.message}
+            <strong>Result:</strong> {step.result.message}
           </div>
         )}
         
         {step.result.data && (
           <details className="step-data">
-            <summary>詳細データ</summary>
+            <summary>Detailed Data</summary>
             <pre>{JSON.stringify(step.result.data, null, 2)}</pre>
           </details>
         )}
@@ -361,66 +365,66 @@ const ExecutionStepDisplay: React.FC<{ step: ExecutionStep }> = ({ step }) => {
 };
 ```
 
-### 🎯 **使用例シナリオ**
+### 🎯 **Usage Example Scenarios**
 
-#### シナリオ1: 研究ノート整理
-
-```
-ユーザー: 「機械学習に関するノートを整理して、学習マップを作成して」
-
-エージェント実行:
-1. 🔍 search_notes("機械学習") → 関連ノート15件発見
-2. 📖 read_note() → 各ノートの内容を分析
-3. 🗂️ create_note("機械学習_学習マップ", template="mindmap") → マップノート作成
-4. 🔗 create_link() → 関連ノートをマップにリンク
-5. 📝 update_note() → マップに学習進度と関係性を追記
-
-結果報告: 「機械学習に関する15件のノートを整理し、学習マップを作成しました。」
-```
-
-#### シナリオ2: 日次レビュー準備
+#### Scenario 1: Research Note Organization
 
 ```
-ユーザー: 「今日作成したノートをまとめて、明日のタスクも抽出して」
+User: "Organize notes about machine learning and create a learning map"
 
-エージェント実行:
-1. 🗂️ get_vault_structure() → 今日の更新ファイル特定
-2. 📖 read_note() → 各ファイルの内容確認
-3. 📝 create_note("日次レビュー_2024-06-26") → レビューノート作成
-4. 📝 update_note() → 作成したノートの要約を追加
-5. 🔍 search_notes("TODO|タスク|明日") → タスクキーワード検索
-6. 📝 update_note() → 明日のタスクリストを追加
+Agent execution:
+1. 🔍 search_notes("machine learning") → Found 15 related notes
+2. 📖 read_note() → Analyze content of each note
+3. 🗂️ create_note("Machine_Learning_Map", template="mindmap") → Create map note
+4. 🔗 create_link() → Link related notes to map
+5. 📝 update_note() → Add learning progress and relationships to map
 
-結果報告: 「今日作成した5件のノートをまとめ、明日のタスク3件を抽出しました。」
+Result report: "Organized 15 notes about machine learning and created a learning map."
 ```
 
-### 📋 **実装優先度**
+#### Scenario 2: Daily Review Preparation
 
-#### フェーズ1-1 (最優先・1週間)
-1. ✅ **基本的なエージェント実行エンジン**
-2. ✅ **主要ツール実装（create, read, search, update）**
-3. ✅ **シンプルな実行可視化**
-4. ✅ **エラーハンドリング**
+```
+User: "Summarize notes created today and extract tomorrow's tasks"
 
-#### フェーズ1-2 (重要・2週間)
-1. 📋 **高度な計画立案（マルチステップタスク）**
-2. 📋 **実行中断・再開機能**
-3. 📋 **実行履歴保存**
-4. 📋 **ツール追加（link creation, templates）**
+Agent execution:
+1. 🗂️ get_vault_structure() → Identify today's updated files
+2. 📖 read_note() → Check content of each file
+3. 📝 create_note("Daily_Review_2024-06-26") → Create review note
+4. 📝 update_note() → Add summary of created notes
+5. 🔍 search_notes("TODO|task|tomorrow") → Search task keywords
+6. 📝 update_note() → Add tomorrow's task list
 
-#### フェーズ1-3 (拡張・3-4週間)
-1. 📋 **コンテキスト理解強化**
-2. 📋 **カスタムツール作成機能**
-3. 📋 **実行効率最適化**
-4. 📋 **ユーザーフィードバック学習**
+Result report: "Summarized 5 notes created today and extracted 3 tasks for tomorrow."
+```
 
-## まとめ
+### 📋 **Implementation Priority**
 
-この設計により：
+#### Phase 1-1 (Highest Priority - 1 week)
+1. ✅ **Basic agent execution engine**
+2. ✅ **Main tool implementation (create, read, search, update)**
+3. ✅ **Simple execution visualization**
+4. ✅ **Error handling**
 
-- **自立性**: ユーザー指示から完了まで自動実行
-- **透明性**: 各ステップの可視化
-- **制御性**: 必要時の中断・修正
-- **拡張性**: 新しいツール・タスクの追加
+#### Phase 1-2 (Important - 2 weeks)
+1. 📋 **Advanced planning (multi-step tasks)**
+2. 📋 **Execution pause/resume functionality**
+3. 📋 **Execution history saving**
+4. 📋 **Additional tools (link creation, templates)**
 
-ClaudeCodeのような使いやすさと、OpenHandsのような自立性を兼ね備えたエージェントシステムを実現できます。
+#### Phase 1-3 (Extension - 3-4 weeks)
+1. 📋 **Enhanced context understanding**
+2. 📋 **Custom tool creation capability**
+3. 📋 **Execution efficiency optimization**
+4. 📋 **User feedback learning**
+
+## Summary
+
+This design enables:
+
+- **Autonomy**: Automatic execution from user instruction to completion
+- **Transparency**: Visualization of each step
+- **Control**: Interruption and modification when needed
+- **Extensibility**: Addition of new tools and tasks
+
+We can realize an agent system that combines the ease of use of ClaudeCode with the autonomy of OpenHands.

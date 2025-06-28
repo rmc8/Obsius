@@ -15,6 +15,18 @@ import {
 } from '../utils/types';
 import { AIMessage, StreamCallback, StreamChunk } from './providers/BaseProvider';
 import { t, getCurrentLanguage, buildLocalizedSystemPrompt } from '../utils/i18n';
+import { WORKFLOW_CONSTANTS } from '../utils/constants';
+import { 
+  WorkflowState, 
+  WorkflowStateFactory, 
+  WorkflowStateManager,
+  WorkflowPhase 
+} from './WorkflowState';
+import { BaseNode } from './workflow/BaseNode';
+import { AnalyzeNode } from './workflow/AnalyzeNode';
+import { SearchNode } from './workflow/SearchNode';
+import { ExecuteNode } from './workflow/ExecuteNode';
+import { WorkflowPersistence } from './WorkflowPersistence';
 
 export interface AgentConfig {
   maxTokens?: number;
@@ -22,8 +34,9 @@ export interface AgentConfig {
   streaming?: boolean;
   tools?: string[];
   providerId?: string;  // Specific provider to use
-  maxIterations?: number;  // Max ReACT iterations (default: 5)
+  maxIterations?: number;  // Max workflow iterations (default: 24)
   enableReACT?: boolean;   // Enable ReACT reasoning (default: true)
+  resumeWorkflow?: boolean; // Resume existing workflow if available (default: true)
 }
 
 export interface ConversationContext {
@@ -65,6 +78,12 @@ export class AgentOrchestrator {
     requestCount: 0
   };
 
+  // LangGraph-style workflow management
+  private workflowStates: Map<string, WorkflowState> = new Map();
+  private workflowNodes: Map<string, BaseNode> = new Map();
+  private currentWorkflowId?: string;
+  private workflowPersistence: WorkflowPersistence;
+
   constructor(
     app: App,
     providerManager: ProviderManager,
@@ -73,11 +92,20 @@ export class AgentOrchestrator {
     this.app = app;
     this.providerManager = providerManager;
     this.toolRegistry = toolRegistry;
+    
+    // Initialize workflow persistence
+    this.workflowPersistence = new WorkflowPersistence(app, {
+      enablePersistence: true,
+      storageLocation: 'vault'
+    });
+    
+    // Initialize workflow nodes
+    this.initializeWorkflowNodes();
   }
 
   /**
-   * Process user message using ReACT (Reasoning + Acting) methodology
-   * Implements iterative thinking → action → observation cycles
+   * Process user message using LangGraph-style StateGraph workflow
+   * Enhanced with ReACT methodology and up to 24 iterations
    */
   async processMessage(
     userInput: string,
@@ -96,10 +124,10 @@ export class AgentOrchestrator {
       this.conversationHistory.push(userMessage);
       context.messages = [...this.conversationHistory];
 
-      // Start ReACT loop
-      const reactResult = await this.executeReACTLoop(userInput, context, config);
+      // Use StateGraph workflow instead of simple ReACT loop
+      const workflowResult = await this.executeStateGraphWorkflow(userInput, context, config);
       
-      return reactResult;
+      return workflowResult;
 
     } catch (error) {
       console.error('Agent orchestrator error:', error);
@@ -114,14 +142,519 @@ export class AgentOrchestrator {
   }
 
   /**
+   * Initialize workflow nodes for StateGraph execution
+   */
+  private initializeWorkflowNodes(): void {
+    // Initialize core workflow nodes
+    const analyzeNode = new AnalyzeNode({
+      id: 'analyze_node',
+      name: 'Task Analysis',
+      enableTaskDecomposition: true,
+      maxSubtasks: 8
+    });
+
+    const searchNode = new SearchNode({
+      id: 'search_node',
+      name: 'Information Search',
+      maxSearchResults: 10,
+      searchDepth: 'medium',
+      includeContent: true
+    });
+
+    const executeNode = new ExecuteNode({
+      id: 'execute_node',
+      name: 'Action Execution',
+      maxConcurrentActions: 3,
+      enableActionChaining: true,
+      validateBeforeExecution: true
+    });
+
+    // Register nodes
+    this.workflowNodes.set('analyze_node', analyzeNode);
+    this.workflowNodes.set('search_node', searchNode);
+    this.workflowNodes.set('execute_node', executeNode);
+  }
+
+  /**
+   * Execute StateGraph-style workflow with conditional routing
+   */
+  private async executeStateGraphWorkflow(
+    userInput: string,
+    context: ConversationContext,
+    config: AgentConfig
+  ): Promise<AssistantResponse> {
+    const sessionId = context.userId || 'default_session';
+    const vaultName = this.app.vault.getName();
+    
+    // Create or get existing workflow state
+    const workflowState = await this.getOrCreateWorkflowState(sessionId, userInput, vaultName, config);
+    const stateManager = new WorkflowStateManager(workflowState);
+    this.currentWorkflowId = workflowState.workflowId;
+
+    const allExecutedActions: ObsidianAction[] = [];
+    let finalAssistantMessage: ChatMessage | null = null;
+
+    console.log('🔄 Starting StateGraph workflow for:', userInput);
+
+    try {
+      // Quick task complexity assessment
+      const isSimpleTask = this.assessTaskComplexity(userInput);
+      
+      console.log(`📊 Task complexity assessment: ${isSimpleTask ? 'Simple' : 'Complex'}`);
+      console.log(`📝 User input: "${userInput}"`);
+      
+      if (isSimpleTask) {
+        console.log('⚡ Simple task detected - using direct execution');
+        // For simple tasks, skip complex workflow and execute directly
+        const directResult = await this.executeSimpleTask(userInput, workflowState, stateManager, context, config);
+        if (directResult) {
+          return directResult;
+        }
+      } else {
+        console.log('🔄 Complex task detected - using full workflow');
+      }
+
+      // Execute full workflow for complex tasks
+      while (stateManager.nextIteration() && !workflowState.isComplete && !workflowState.isError) {
+        console.log(`📍 Working on: ${workflowState.currentObjective}`);
+        
+        // Create execution context
+        const executionContext = {
+          state: workflowState,
+          stateManager,
+          startTime: new Date(),
+          timeout: WORKFLOW_CONSTANTS.ITERATION_TIMEOUT_MS,
+          logger: (message: string) => console.log(`[StateGraph] ${message}`)
+        };
+
+        // Determine current node based on phase and routing logic
+        const currentNode = this.determineCurrentNode(workflowState);
+        if (!currentNode) {
+          console.log('❌ No valid node found for current state');
+          break;
+        }
+
+        console.log(`🎯 Executing node: ${currentNode.getConfig().name} (Phase: ${workflowState.currentPhase})`);
+
+        // Execute current node
+        const nodeResult = await currentNode.execute(executionContext);
+        
+        // Update workflow state based on result
+        if (nodeResult.success) {
+          // Collect executed actions
+          allExecutedActions.push(...workflowState.executedActions);
+          
+          // Route to next nodes
+          if (nodeResult.nextNodes && nodeResult.nextNodes.length > 0) {
+            const nextPhase = this.getPhaseForNode(nodeResult.nextNodes[0]);
+            if (nextPhase) {
+              stateManager.transitionToPhase(nextPhase);
+            }
+          } else {
+            // No more nodes to execute - workflow complete
+            stateManager.markComplete(workflowState.confidence);
+            break;
+          }
+        } else {
+          console.log(`❌ Node execution failed: ${nodeResult.error}`);
+          
+          // Handle node failure
+          if (!nodeResult.shouldContinue) {
+            stateManager.markError(nodeResult.error || 'Node execution failed');
+            break;
+          }
+        }
+
+        // Check for completion conditions
+        if (this.checkWorkflowCompletion(workflowState, stateManager)) {
+          console.log('✅ Workflow completion detected');
+          stateManager.markComplete(workflowState.confidence || 0.9);
+          break;
+        }
+
+        // Create checkpoint every few iterations
+        if (workflowState.currentIteration % 3 === 0) {
+          stateManager.createCheckpoint(`Iteration ${workflowState.currentIteration} checkpoint`);
+          
+          // Queue for persistence
+          this.workflowPersistence.queueForPersistence(workflowState);
+        }
+      }
+
+      // If workflow ended but not marked complete, check if we should mark it complete
+      if (!workflowState.isComplete && !workflowState.isError) {
+        const hasSuccessfulActions = workflowState.executedActions.some(a => a.result?.success);
+        if (hasSuccessfulActions) {
+          console.log('✅ Marking workflow complete based on successful actions');
+          stateManager.markComplete(workflowState.confidence || 0.85);
+        }
+      }
+
+      // Generate final assistant message
+      finalAssistantMessage = this.createWorkflowSummaryMessage(workflowState, stateManager);
+
+    } catch (error) {
+      console.error('StateGraph workflow error:', error);
+      stateManager.markError(error instanceof Error ? error.message : 'Unknown workflow error');
+      finalAssistantMessage = this.createErrorMessage(error);
+    }
+
+    // Final persistence of completed workflow
+    await this.workflowPersistence.saveWorkflowState(workflowState);
+    
+    console.log('🏁 Workflow completed');
+
+    return {
+      message: finalAssistantMessage || this.createWorkflowSummaryMessage(workflowState, stateManager),
+      actions: allExecutedActions,
+      filesCreated: this.extractCreatedFiles(allExecutedActions),
+      filesModified: this.extractModifiedFiles(allExecutedActions)
+    };
+  }
+
+  /**
+   * Assess task complexity for routing decisions
+   */
+  private assessTaskComplexity(userInput: string): boolean {
+    const lowercaseInput = userInput.toLowerCase();
+    
+    // Complex task indicators that require full workflow
+    const complexIndicators = [
+      'organize',
+      'analyze',
+      'research',
+      'comprehensive',
+      'detailed',
+      'multiple',
+      'all',
+      'every',
+      'restructure',
+      'migrate'
+    ];
+    
+    // Check for complex indicators
+    const hasComplexIndicators = complexIndicators.some(indicator => 
+      lowercaseInput.includes(indicator)
+    );
+    
+    // Check for multiple actions (and, then)
+    const hasMultipleActions = 
+      (lowercaseInput.match(/\band\b/g) || []).length > 1 ||
+      lowercaseInput.includes(' then ');
+    
+    // Check input length (very long inputs might be complex)
+    const isLongInput = userInput.split(' ').length > 20;
+    
+    // Simple task = NOT complex
+    return !hasComplexIndicators && !hasMultipleActions && !isLongInput;
+  }
+
+  /**
+   * Execute simple task directly without full workflow
+   */
+  private async executeSimpleTask(
+    userInput: string,
+    workflowState: WorkflowState,
+    stateManager: WorkflowStateManager,
+    context: ConversationContext,
+    config: AgentConfig
+  ): Promise<AssistantResponse | null> {
+    try {
+      // Mark workflow as starting
+      stateManager.transitionToPhase('execute');
+      
+      // Simple task execution - get AI response directly
+      const aiResponse = await this.generateAIResponse(userInput, context, config);
+      
+      // Create assistant message
+      const assistantMessage: ChatMessage = {
+        id: this.generateMessageId(),
+        timestamp: new Date(),
+        type: 'assistant',
+        content: aiResponse.content,
+        actions: aiResponse.actions
+      };
+      
+      this.conversationHistory.push(assistantMessage);
+      
+      // Execute any tool calls if present
+      const executedActions: ObsidianAction[] = [];
+      if (aiResponse.actions && aiResponse.actions.length > 0) {
+        for (const action of aiResponse.actions) {
+          const result = await this.executeAction(action, context);
+          action.result = result;
+          executedActions.push(action);
+          
+          // Add to workflow state
+          workflowState.executedActions.push(action);
+          workflowState.actionResults.push(result);
+        }
+      }
+      
+      // Mark as complete
+      stateManager.markComplete(0.9);
+      
+      // Save state
+      await this.workflowPersistence.saveWorkflowState(workflowState);
+      
+      return {
+        message: assistantMessage,
+        actions: executedActions,
+        filesCreated: this.extractCreatedFiles(executedActions),
+        filesModified: this.extractModifiedFiles(executedActions)
+      };
+      
+    } catch (error) {
+      console.error('Simple task execution failed:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get or create workflow state for session
+   */
+  private async getOrCreateWorkflowState(
+    sessionId: string,
+    userInput: string,
+    vaultName: string,
+    config: AgentConfig
+  ): Promise<WorkflowState> {
+    // Try to find existing incomplete workflow for this session
+    if (config.resumeWorkflow !== false) {
+      const persistedWorkflows = await this.workflowPersistence.listPersistedWorkflows(sessionId);
+      const incompleteWorkflow = persistedWorkflows.find(w => 
+        !w.metadata.phase.includes('complete') && 
+        !w.metadata.phase.includes('error')
+      );
+      
+      if (incompleteWorkflow) {
+        console.log(`🔄 Resuming workflow ${incompleteWorkflow.workflowId} from ${incompleteWorkflow.metadata.phase}`);
+        const workflowState = await this.workflowPersistence.loadWorkflowState(incompleteWorkflow.workflowId);
+        if (workflowState) {
+          this.workflowStates.set(workflowState.workflowId, workflowState);
+          return workflowState;
+        }
+      }
+    }
+
+    // Create new workflow state
+    const workflowState = WorkflowStateFactory.createInitialState(
+      sessionId,
+      userInput,
+      vaultName,
+      {
+        maxIterations: config.maxIterations || WORKFLOW_CONSTANTS.MAX_ITERATIONS,
+        enablePersistence: true,
+        verboseLogging: false,
+        autoCheckpoint: true
+      }
+    );
+
+    this.workflowStates.set(workflowState.workflowId, workflowState);
+    return workflowState;
+  }
+
+  /**
+   * Determine current node based on workflow state
+   */
+  private determineCurrentNode(workflowState: WorkflowState): BaseNode | null {
+    switch (workflowState.currentPhase) {
+      case 'initialize':
+      case 'analyze':
+        return this.workflowNodes.get('analyze_node') || null;
+      
+      case 'search':
+        return this.workflowNodes.get('search_node') || null;
+      
+      case 'execute':
+        return this.workflowNodes.get('execute_node') || null;
+      
+      case 'reflect':
+        // For now, reflection leads to completion
+        return null;
+      
+      case 'complete':
+      case 'error':
+        return null;
+      
+      default:
+        return this.workflowNodes.get('analyze_node') || null;
+    }
+  }
+
+  /**
+   * Get workflow phase for node name
+   */
+  private getPhaseForNode(nodeName: string): WorkflowPhase | null {
+    switch (nodeName) {
+      case 'analyze_node':
+        return 'analyze';
+      case 'search_node':
+        return 'search';
+      case 'execute_node':
+        return 'execute';
+      case 'reflect_node':
+        return 'reflect';
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * Check if workflow should complete
+   */
+  private checkWorkflowCompletion(workflowState: WorkflowState, stateManager: WorkflowStateManager): boolean {
+    // Early completion for simple tasks
+    if (workflowState.currentIteration === 1 && workflowState.executedActions.length > 0) {
+      const allActionsSuccessful = workflowState.executedActions.every(action => action.result?.success);
+      if (allActionsSuccessful && workflowState.taskPlan) {
+        // Simple task completed in one iteration
+        if (workflowState.taskPlan.estimatedComplexity <= 2) {
+          return true;
+        }
+      }
+    }
+    
+    // Check if all objectives are completed
+    if (workflowState.subObjectives.length > 0) {
+      const allObjectivesCompleted = workflowState.completedObjectives.length >= workflowState.subObjectives.length;
+      if (allObjectivesCompleted) {
+        return true;
+      }
+    }
+    
+    // Check if we've accomplished the main objective
+    const hasSuccessfulActions = workflowState.executedActions.some(action => action.result?.success);
+    const hasHighConfidence = workflowState.confidence > 0.85;
+    const completedMostObjectives = workflowState.completedObjectives.length >= workflowState.subObjectives.length * 0.8;
+    
+    // For tasks without sub-objectives, check if main task seems complete
+    if (workflowState.subObjectives.length === 0 && hasSuccessfulActions) {
+      // Check recent memory for completion signals
+      const recentMemory = stateManager.getMemoryEntries(undefined, undefined, 5);
+      const hasCompletionSignal = recentMemory.some(mem => 
+        mem.content.toLowerCase().includes('completed') ||
+        mem.content.toLowerCase().includes('finished') ||
+        mem.content.toLowerCase().includes('done')
+      );
+      
+      if (hasCompletionSignal || hasHighConfidence) {
+        return true;
+      }
+    }
+    
+    // Standard completion check
+    return hasSuccessfulActions && (hasHighConfidence || completedMostObjectives);
+  }
+
+  /**
+   * Create workflow summary message
+   */
+  private createWorkflowSummaryMessage(workflowState: WorkflowState, stateManager: WorkflowStateManager): ChatMessage {
+    const executedActions = workflowState.executedActions.length;
+    const successfulActions = workflowState.executedActions.filter(a => a.result?.success).length;
+    
+    let summary = '';
+    
+    if (workflowState.isComplete || successfulActions > 0) {
+      // If we have any successful actions, summarize what was done
+      const accomplishments = this.summarizeAccomplishments(workflowState);
+      summary = accomplishments;
+    } else if (workflowState.isError) {
+      summary = `I encountered an issue while working on your request: ${workflowState.errorMessage}`;
+    } else if (executedActions === 0) {
+      // No actions were taken - might be analysis only
+      summary = `I analyzed your request: "${workflowState.originalRequest}"`;
+      if (workflowState.taskPlan) {
+        summary += `\n\nI've identified that this task requires: ${workflowState.taskPlan.requiredTools.join(', ')}.`;
+      }
+    } else {
+      // Fallback - should rarely happen
+      summary = `I processed your request but didn't complete any actions. This might indicate an issue with the workflow.`;
+    }
+
+    return {
+      id: this.generateMessageId(),
+      timestamp: new Date(),
+      type: 'assistant',
+      content: summary
+    };
+  }
+
+  /**
+   * Summarize what was accomplished without mentioning steps
+   */
+  private summarizeAccomplishments(workflowState: WorkflowState): string {
+    const successfulActions = workflowState.executedActions.filter(a => a.result?.success);
+    
+    if (successfulActions.length === 0) {
+      return 'I completed analyzing your request.';
+    }
+    
+    // Group actions by type
+    const actionGroups = new Map<string, number>();
+    successfulActions.forEach(action => {
+      const count = actionGroups.get(action.type) || 0;
+      actionGroups.set(action.type, count + 1);
+    });
+    
+    // Build natural language summary
+    const summaryParts: string[] = [];
+    
+    actionGroups.forEach((count, type) => {
+      switch (type) {
+        case 'create_note':
+          summaryParts.push(`created ${count} note${count > 1 ? 's' : ''}`);
+          break;
+        case 'update_note':
+          summaryParts.push(`updated ${count} note${count > 1 ? 's' : ''}`);
+          break;
+        case 'search_notes':
+          summaryParts.push(`searched for relevant content`);
+          break;
+        case 'read_note':
+          summaryParts.push(`analyzed existing notes`);
+          break;
+        default:
+          summaryParts.push(`performed ${count} ${type} operation${count > 1 ? 's' : ''}`);
+      }
+    });
+    
+    let summary = 'I ';
+    if (summaryParts.length === 1) {
+      summary += summaryParts[0];
+    } else if (summaryParts.length === 2) {
+      summary += `${summaryParts[0]} and ${summaryParts[1]}`;
+    } else {
+      const lastPart = summaryParts.pop();
+      summary += `${summaryParts.join(', ')}, and ${lastPart}`;
+    }
+    
+    summary += '.';
+    
+    // Add specific details if available
+    const createdFiles = workflowState.executedActions
+      .filter(a => a.type === 'create_note' && a.result?.success)
+      .map(a => a.result?.data?.path || a.parameters?.title)
+      .filter(Boolean);
+    
+    if (createdFiles.length > 0) {
+      summary += `\n\nCreated: ${createdFiles.join(', ')}`;
+    }
+    
+    return summary;
+  }
+
+  /**
    * Execute ReACT (Reasoning + Acting) loop with iterative thinking
+   * [Legacy method - kept for backwards compatibility]
    */
   private async executeReACTLoop(
     userInput: string,
     context: ConversationContext,
     config: AgentConfig
   ): Promise<AssistantResponse> {
-    const maxIterations = config.maxIterations || 5;
+    const maxIterations = config.maxIterations || WORKFLOW_CONSTANTS.MAX_ITERATIONS;
     const allExecutedActions: ObsidianAction[] = [];
     let workingMemory: string[] = [`User Request: ${userInput}`];
     let finalAssistantMessage: ChatMessage | null = null;
@@ -946,5 +1479,62 @@ export class AgentOrchestrator {
     summary += `Total actions performed: ${allActions.length}`;
     
     return summary;
+  }
+
+  /**
+   * Get workflow persistence statistics
+   */
+  async getWorkflowStats(): Promise<{
+    totalWorkflows: number;
+    totalSize: number;
+    oldestWorkflow?: Date;
+    newestWorkflow?: Date;
+  }> {
+    return await this.workflowPersistence.getStats();
+  }
+
+  /**
+   * Clean up old workflow states
+   */
+  async cleanupOldWorkflows(): Promise<number> {
+    return await this.workflowPersistence.cleanupOldWorkflows();
+  }
+
+  /**
+   * List persisted workflows for a session
+   */
+  async listPersistedWorkflows(sessionId?: string): Promise<any[]> {
+    return await this.workflowPersistence.listPersistedWorkflows(sessionId);
+  }
+
+  /**
+   * Load and resume a specific workflow
+   */
+  async resumeWorkflow(workflowId: string): Promise<WorkflowState | null> {
+    const workflowState = await this.workflowPersistence.loadWorkflowState(workflowId);
+    if (workflowState) {
+      this.workflowStates.set(workflowState.workflowId, workflowState);
+      this.currentWorkflowId = workflowState.workflowId;
+    }
+    return workflowState;
+  }
+
+  /**
+   * Get current workflow state
+   */
+  getCurrentWorkflowState(): WorkflowState | null {
+    if (this.currentWorkflowId) {
+      return this.workflowStates.get(this.currentWorkflowId) || null;
+    }
+    return null;
+  }
+
+  /**
+   * Cleanup resources
+   */
+  destroy(): void {
+    this.workflowPersistence.destroy();
+    this.workflowStates.clear();
+    this.workflowNodes.clear();
   }
 }
