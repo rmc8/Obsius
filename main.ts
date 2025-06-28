@@ -17,7 +17,7 @@ import { ExecutionContext, ObsiusSettings, SecureProviderConfig } from './src/ut
 import { ProviderManager } from './src/core/providers/ProviderManager';
 import { ApiKeyInput } from './src/ui/components/ApiKeyInput';
 import { ChatView, VIEW_TYPE_OBSIUS_CHAT } from './src/ui/views/ChatView';
-import { initializeI18n } from './src/utils/i18n';
+import { initializeI18n, t } from './src/utils/i18n';
 
 /**
  * Default plugin settings
@@ -57,7 +57,8 @@ const DEFAULT_SETTINGS: ObsiusSettings = {
     }
   },
   ui: {
-    language: 'en',
+    interfaceLanguage: 'en',
+    chatLanguage: 'auto',
     showTimestamps: true,
     enableStreaming: false,
     autoScroll: true
@@ -90,8 +91,8 @@ export default class ObsiusPlugin extends Plugin {
     // Load settings first
     await this.loadSettings();
 
-    // Initialize i18n system
-    initializeI18n(this.settings.ui.language);
+    // Initialize i18n system with separated languages
+    initializeI18n(this.settings.ui.interfaceLanguage, this.settings.ui.chatLanguage);
 
     // Wait for Obsidian to fully stabilize before initializing secure components
     await this.waitForObsidianStability();
@@ -1066,7 +1067,7 @@ class ObsiusSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl('h2', { text: 'Obsius AI Agent Settings' });
+    containerEl.createEl('h2', { text: t('settings.settingsTitle') });
 
     // AI Provider Settings
     this.createProviderSettings(containerEl);
@@ -1082,15 +1083,22 @@ class ObsiusSettingTab extends PluginSettingTab {
   }
 
   /**
+   * Refresh settings display to apply language changes
+   */
+  refreshSettingsDisplay(): void {
+    this.display();
+  }
+
+  /**
    * Create AI provider settings section
    */
   private createProviderSettings(containerEl: HTMLElement): void {
-    containerEl.createEl('h3', { text: 'AI Provider Settings' });
+    containerEl.createEl('h3', { text: t('settings.providerSettings') });
 
     // Default provider selection
     new Setting(containerEl)
-      .setName('Default Provider')
-      .setDesc('Select the default AI provider for chat interactions')
+      .setName(t('settings.defaultProvider'))
+      .setDesc(t('settings.defaultProviderDesc'))
       .addDropdown(dropdown => {
         for (const [providerId, config] of Object.entries(this.plugin.settings.providers)) {
           dropdown.addOption(providerId, config.name);
@@ -1114,7 +1122,7 @@ class ObsiusSettingTab extends PluginSettingTab {
    */
   private createProviderOverview(containerEl: HTMLElement): void {
     const overviewEl = containerEl.createDiv('obsius-provider-overview');
-    overviewEl.createEl('h4', { text: 'Provider Status' });
+    overviewEl.createEl('h4', { text: t('settings.providerStatus') });
 
     const statusContainer = overviewEl.createDiv('obsius-status-grid');
 
@@ -1141,13 +1149,14 @@ class ObsiusSettingTab extends PluginSettingTab {
   private updateProviderStatusIcon(providerId: string, config: any, statusIcon: HTMLElement): void {
     if (config.authenticated) {
       statusIcon.textContent = '✅';
-      statusIcon.title = `Connected (${config.lastVerified ? new Date(config.lastVerified).toLocaleString() : 'Unknown'})`;
+      const lastVerified = config.lastVerified ? new Date(config.lastVerified).toLocaleString() : t('settings.unknown');
+      statusIcon.title = `${t('settings.connected')} (${lastVerified})`;
     } else if (config.hasApiKey) {
       statusIcon.textContent = '⚠️';
-      statusIcon.title = 'API key stored but not verified';
+      statusIcon.title = t('settings.apiKeyStored');
     } else {
       statusIcon.textContent = '❌';
-      statusIcon.title = 'No API key configured';
+      statusIcon.title = t('settings.noApiKey');
     }
   }
 
@@ -1155,7 +1164,7 @@ class ObsiusSettingTab extends PluginSettingTab {
    * Create individual provider settings
    */
   private createIndividualProviderSettings(containerEl: HTMLElement): void {
-    containerEl.createEl('h4', { text: 'API Key Configuration' });
+    containerEl.createEl('h4', { text: t('settings.apiKeyConfiguration') });
 
     for (const [providerId, config] of Object.entries(this.plugin.settings.providers)) {
       const provider = this.plugin.providerManager.getProvider(providerId);
@@ -1251,8 +1260,8 @@ class ObsiusSettingTab extends PluginSettingTab {
       
       // Model selection
       new Setting(controlsContainer)
-        .setName('Model')
-        .setDesc('Select the model to use for this provider')
+        .setName(t('settings.model'))
+        .setDesc(t('settings.modelDesc'))
         .addDropdown(dropdown => {
           if (config.models) {
             for (const model of config.models) {
@@ -1269,11 +1278,11 @@ class ObsiusSettingTab extends PluginSettingTab {
 
       // Disconnect button
       new Setting(controlsContainer)
-        .setName('Connection')
-        .setDesc('Disconnect and remove API key from secure storage')
+        .setName(t('settings.connection'))
+        .setDesc(t('settings.connectionDesc'))
         .addButton(button => {
           button
-            .setButtonText('Disconnect')
+            .setButtonText(t('settings.disconnect'))
             .setClass('obsius-disconnect-button')
             .onClick(async () => {
               await this.disconnectProvider(providerId, container);
@@ -1320,7 +1329,7 @@ class ObsiusSettingTab extends PluginSettingTab {
 
     } catch (error) {
       console.error(`Failed to disconnect ${providerId}:`, error);
-      new Notice(`Failed to disconnect ${providerId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      new Notice(`${t('settings.disconnectFailed', { provider: providerId })}: ${error instanceof Error ? error.message : t('settings.unknownError')}`);
     }
   }
 
@@ -1328,12 +1337,15 @@ class ObsiusSettingTab extends PluginSettingTab {
    * Create tool settings section
    */
   private createToolSettings(containerEl: HTMLElement): void {
-    containerEl.createEl('h3', { text: 'Tool Settings' });
+    containerEl.createEl('h3', { text: t('settings.toolSettings') });
 
     const toolStats = this.plugin.toolRegistry?.getStats();
     if (toolStats) {
       containerEl.createEl('p', {
-        text: `${toolStats.enabled} tools enabled, ${toolStats.disabled} disabled`
+        text: t('settings.toolsStatus', { 
+          enabled: toolStats.enabled.toString(), 
+          disabled: toolStats.disabled.toString() 
+        })
       });
     }
 
@@ -1344,24 +1356,54 @@ class ObsiusSettingTab extends PluginSettingTab {
    * Create UI settings section
    */
   private createUISettings(containerEl: HTMLElement): void {
-    containerEl.createEl('h3', { text: 'Interface Settings' });
+    containerEl.createEl('h3', { text: t('settings.interfaceSettings') });
 
     new Setting(containerEl)
-      .setName('Language')
-      .setDesc('Select interface language')
+      .setName(t('settings.interfaceLanguage'))
+      .setDesc(t('settings.interfaceLanguageDesc'))
       .addDropdown(dropdown => {
-        dropdown.addOption('en', 'English');
-        dropdown.addOption('ja', '日本語');
-        dropdown.setValue(this.plugin.settings.ui.language);
+        dropdown.addOption('en', t('settings.english'));
+        dropdown.addOption('ja', t('settings.japanese'));
+        dropdown.setValue(this.plugin.settings.ui.interfaceLanguage);
         dropdown.onChange(async (value: 'en' | 'ja') => {
-          this.plugin.settings.ui.language = value;
+          this.plugin.settings.ui.interfaceLanguage = value;
           await this.plugin.saveSettings();
+          
+          // Update i18n and refresh UI
+          const { initializeI18n } = await import('./src/utils/i18n');
+          initializeI18n(this.plugin.settings.ui.interfaceLanguage, this.plugin.settings.ui.chatLanguage);
+          
+          // Update chat view if open
+          if (this.plugin.chatView) {
+            this.plugin.chatView.updateLanguage();
+          }
+          
+          // Refresh settings page
+          this.refreshSettingsDisplay();
         });
       });
 
     new Setting(containerEl)
-      .setName('Show Timestamps')
-      .setDesc('Show timestamps in chat messages')
+      .setName(t('settings.chatLanguage'))
+      .setDesc(t('settings.chatLanguageDesc'))
+      .addDropdown(dropdown => {
+        dropdown.addOption('auto', t('settings.autoDetect'));
+        dropdown.addOption('en', t('settings.english'));
+        dropdown.addOption('ja', t('settings.japanese'));
+        dropdown.setValue(this.plugin.settings.ui.chatLanguage);
+        dropdown.onChange(async (value: 'auto' | 'en' | 'ja') => {
+          this.plugin.settings.ui.chatLanguage = value;
+          await this.plugin.saveSettings();
+          
+          // Update chat language setting
+          const { setChatLanguage } = await import('./src/utils/i18n');
+          setChatLanguage(value);
+        });
+      });
+
+    new Setting(containerEl)
+      .setName(t('settings.showTimestamps'))
+      .setDesc(t('settings.showTimestampsDesc'))
       .addToggle(toggle => {
         toggle.setValue(this.plugin.settings.ui.showTimestamps);
         toggle.onChange(async (value) => {
@@ -1371,8 +1413,8 @@ class ObsiusSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
-      .setName('Auto Scroll')
-      .setDesc('Automatically scroll to latest messages')
+      .setName(t('settings.autoScroll'))
+      .setDesc(t('settings.autoScrollDesc'))
       .addToggle(toggle => {
         toggle.setValue(this.plugin.settings.ui.autoScroll);
         toggle.onChange(async (value) => {
@@ -1394,7 +1436,7 @@ class ObsiusSettingTab extends PluginSettingTab {
       case 'google':
         return 'AI...';
       default:
-        return 'Enter API key...';
+        return t('settings.enterApiKey');
     }
   }
 
@@ -1402,12 +1444,12 @@ class ObsiusSettingTab extends PluginSettingTab {
    * Create workflow settings section
    */
   private createWorkflowSettings(containerEl: HTMLElement): void {
-    containerEl.createEl('h3', { text: 'Workflow Settings' });
+    containerEl.createEl('h3', { text: t('settings.workflowSettings') });
 
     // Max iterations setting with slider
     new Setting(containerEl)
-      .setName('Maximum Iterations')
-      .setDesc('Maximum number of reasoning iterations (1-100). Lower values complete tasks faster but may miss complex solutions. Higher values allow deeper exploration but take more time.')
+      .setName(t('settings.maxIterations'))
+      .setDesc(t('settings.maxIterationsDesc'))
       .addSlider(slider => {
         slider
           .setLimits(1, 100, 1)
@@ -1421,7 +1463,7 @@ class ObsiusSettingTab extends PluginSettingTab {
       .addExtraButton(button => {
         button
           .setIcon('reset')
-          .setTooltip('Reset to default (24)')
+          .setTooltip(t('settings.resetToDefault'))
           .onClick(async () => {
             this.plugin.settings.workflow.maxIterations = 24;
             await this.plugin.saveSettings();
@@ -1431,8 +1473,8 @@ class ObsiusSettingTab extends PluginSettingTab {
 
     // Enable ReACT toggle
     new Setting(containerEl)
-      .setName('Enable ReACT Methodology')
-      .setDesc('Use Reasoning + Acting cycles for systematic problem-solving')
+      .setName(t('settings.enableReACT'))
+      .setDesc(t('settings.enableReACTDesc'))
       .addToggle(toggle => {
         toggle
           .setValue(this.plugin.settings.workflow.enableReACT)
@@ -1444,8 +1486,8 @@ class ObsiusSettingTab extends PluginSettingTab {
 
     // Enable StateGraph toggle
     new Setting(containerEl)
-      .setName('Enable StateGraph Workflow')
-      .setDesc('Use LangGraph-style multi-node processing for complex tasks')
+      .setName(t('settings.enableStateGraphWorkflow'))
+      .setDesc(t('settings.enableStateGraphWorkflowDesc'))
       .addToggle(toggle => {
         toggle
           .setValue(this.plugin.settings.workflow.enableStateGraph)
@@ -1457,8 +1499,8 @@ class ObsiusSettingTab extends PluginSettingTab {
 
     // Iteration timeout setting
     new Setting(containerEl)
-      .setName('Iteration Timeout (seconds)')
-      .setDesc('Maximum time allowed per iteration (10-300 seconds)')
+      .setName(t('settings.iterationTimeout'))
+      .setDesc(t('settings.iterationTimeoutDesc'))
       .addSlider(slider => {
         slider
           .setLimits(10, 300, 5)
@@ -1473,7 +1515,7 @@ class ObsiusSettingTab extends PluginSettingTab {
     // Add help text
     const helpDiv = containerEl.createDiv('obsius-workflow-help');
     helpDiv.createEl('p', { 
-      text: '💡 Tip: For simple tasks like creating notes or searching, use 5-10 iterations. For complex analysis or multi-step operations, use 20-50 iterations.',
+      text: t('settings.workflowTip'),
       cls: 'setting-item-description'
     });
   }
@@ -1484,13 +1526,13 @@ class ObsiusSettingTab extends PluginSettingTab {
   private getDescriptionForProvider(providerId: string): string {
     switch (providerId) {
       case 'openai':
-        return 'Get your API key from https://platform.openai.com/api-keys';
+        return t('settings.openaiApiKeyDesc');
       case 'anthropic':
-        return 'Get your API key from https://console.anthropic.com/';
+        return t('settings.anthropicApiKeyDesc');
       case 'google':
-        return 'Get your API key from https://ai.google.dev/';
+        return t('settings.googleApiKeyDesc');
       default:
-        return 'Enter your API key for this provider';
+        return t('settings.defaultApiKeyDesc');
     }
   }
 

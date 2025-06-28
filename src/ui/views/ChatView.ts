@@ -5,7 +5,7 @@
 
 import { ItemView, WorkspaceLeaf } from 'obsidian';
 import ObsiusPlugin from '../../../main';
-import { t, initializeI18n, formatDate, getCommandDescriptions } from '../../utils/i18n';
+import { t, initializeI18n, formatDate, getCommandDescriptions, detectLanguageFromText, setChatLanguage } from '../../utils/i18n';
 import { AgentOrchestrator, ConversationContext } from '../../core/AgentOrchestrator';
 import { AssistantResponse, SessionStats } from '../../utils/types';
 
@@ -29,8 +29,8 @@ export class ChatView extends ItemView {
     super(leaf);
     this.plugin = plugin;
     
-    // Initialize i18n with user's language preference
-    initializeI18n(this.plugin.settings.ui.language);
+    // Initialize i18n with user's language preferences
+    initializeI18n(this.plugin.settings.ui.interfaceLanguage, this.plugin.settings.ui.chatLanguage);
     
     // Initialize agent orchestrator
     this.initializeAgentOrchestrator();
@@ -294,6 +294,13 @@ export class ChatView extends ItemView {
     }
 
     console.log('🤖 ChatView.sendChatMessage called with:', message);
+
+    // Auto-detect language if chat language is set to 'auto'
+    if (this.plugin.settings.ui.chatLanguage === 'auto') {
+      const detectedLanguage = detectLanguageFromText(message);
+      setChatLanguage(detectedLanguage);
+      console.log('🔤 Auto-detected language:', detectedLanguage);
+    }
 
     const provider = this.getCurrentProvider();
     const config = this.plugin.settings.providers[provider];
@@ -678,8 +685,8 @@ export class ChatView extends ItemView {
    * Update language (called when language setting is changed)
    */
   public updateLanguage(): void {
-    // Re-initialize i18n with new language
-    initializeI18n(this.plugin.settings.ui.language);
+    // Re-initialize i18n with new separated language settings
+    initializeI18n(this.plugin.settings.ui.interfaceLanguage, this.plugin.settings.ui.chatLanguage);
     
     // Update prompt and placeholder
     this.updatePrompt();

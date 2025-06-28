@@ -4,6 +4,7 @@
  */
 
 import { Setting } from 'obsidian';
+import { t } from '../../utils/i18n';
 import { BaseProvider, ProviderAuthResult } from '../../core/providers/BaseProvider';
 
 /**
@@ -203,7 +204,7 @@ export class ApiKeyInput {
       this.connectionButton = button.buttonEl;
       
       button
-        .setButtonText('Connection')
+        .setButtonText(t('settings.connect'))
         .setClass('obsius-connection-button')
         .onClick(async () => {
           // Prevent rapid clicking
@@ -473,11 +474,11 @@ export class ApiKeyInput {
         this.connectionButton.addClass('obsius-button-connected');
       } else if (!this.state.value) {
         this.connectionButton.disabled = true;
-        this.connectionButton.textContent = 'Connection';
+        this.connectionButton.textContent = t('settings.connect');
         this.connectionButton.removeClass('obsius-button-connecting', 'obsius-button-connected');
       } else {
         this.connectionButton.disabled = false;
-        this.connectionButton.textContent = 'Connection';
+        this.connectionButton.textContent = t('settings.connect');
         this.connectionButton.removeClass('obsius-button-connecting', 'obsius-button-connected');
       }
     }
