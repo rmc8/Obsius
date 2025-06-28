@@ -116,6 +116,323 @@ export interface UpdateNoteParams {
 }
 
 /**
+ * Parameters for the glob tool
+ */
+export interface GlobParams {
+  /**
+   * The glob pattern to match files against
+   */
+  pattern: string;
+
+  /**
+   * The directory to search in (optional, defaults to vault root)
+   */
+  path?: string;
+
+  /**
+   * Whether the search should be case-sensitive (optional, defaults to false)
+   */
+  case_sensitive?: boolean;
+
+  /**
+   * Whether to respect .gitignore patterns (optional, defaults to true)
+   */
+  respect_git_ignore?: boolean;
+}
+
+/**
+ * Parameters for the list directory tool
+ */
+export interface ListDirectoryParams {
+  /**
+   * The absolute path to the directory to list
+   */
+  path: string;
+
+  /**
+   * Array of glob patterns to ignore (optional)
+   */
+  ignore?: string[];
+
+  /**
+   * Whether to respect .gitignore patterns (optional, defaults to true)
+   */
+  respect_git_ignore?: boolean;
+}
+
+/**
+ * File entry returned by list directory tool
+ */
+export interface FileEntry {
+  /**
+   * Name of the file or directory
+   */
+  name: string;
+
+  /**
+   * Absolute path to the file or directory
+   */
+  path: string;
+
+  /**
+   * Whether this entry is a directory
+   */
+  isDirectory: boolean;
+
+  /**
+   * Size of the file in bytes (0 for directories)
+   */
+  size: number;
+
+  /**
+   * Last modified timestamp
+   */
+  modifiedTime: Date;
+}
+
+/**
+ * Parameters for the grep tool
+ */
+export interface GrepParams {
+  /**
+   * The regular expression pattern to search for in file contents
+   */
+  pattern: string;
+
+  /**
+   * The directory to search in (optional, defaults to vault root)
+   */
+  path?: string;
+
+  /**
+   * File pattern to include in the search (e.g. "*.js", "*.{ts,tsx}")
+   */
+  include?: string;
+}
+
+/**
+ * Result object for a single grep match
+ */
+export interface GrepMatch {
+  /**
+   * Relative file path from search directory
+   */
+  filePath: string;
+
+  /**
+   * Line number where match was found (1-based)
+   */
+  lineNumber: number;
+
+  /**
+   * Content of the line containing the match
+   */
+  line: string;
+}
+
+/**
+ * Parameters for the shell tool
+ */
+export interface ShellParams {
+  /**
+   * The shell command to execute
+   */
+  command: string;
+
+  /**
+   * Optional description of what the command does
+   */
+  description?: string;
+
+  /**
+   * Working directory relative to vault root (optional)
+   */
+  directory?: string;
+}
+
+/**
+ * Parameters for the web fetch tool
+ */
+export interface WebFetchParams {
+  /**
+   * The URL to fetch content from
+   */
+  url: string;
+
+  /**
+   * Optional prompt for processing the fetched content
+   */
+  prompt?: string;
+
+  /**
+   * Request timeout in milliseconds (default: 10000)
+   */
+  timeout?: number;
+}
+
+/**
+ * Parameters for the read many files tool
+ */
+export interface ReadManyFilesParams {
+  /**
+   * Array of file paths relative to vault root to read
+   */
+  paths: string[];
+
+  /**
+   * Optional limit on characters read per file
+   */
+  charactersToRead?: number;
+
+  /**
+   * Optional total character limit across all files (default: 150,000)
+   */
+  totalCharacterLimit?: number;
+}
+
+/**
+ * Parameters for the edit tool
+ */
+export interface EditParams {
+  /**
+   * Path to the file to modify (relative to vault root)
+   */
+  file_path: string;
+
+  /**
+   * The exact text to replace (empty string for new file creation)
+   */
+  old_string: string;
+
+  /**
+   * The text to replace old_string with
+   */
+  new_string: string;
+
+  /**
+   * Number of replacements expected (defaults to 1)
+   */
+  expected_replacements?: number;
+}
+
+// ============================================================================
+// MCP (Model Context Protocol) Types
+// ============================================================================
+
+/**
+ * MCP Server configuration
+ */
+export interface MCPServerConfig {
+  /**
+   * Command to execute for Stdio transport
+   */
+  command?: string;
+
+  /**
+   * Command arguments for Stdio transport
+   */
+  args?: string[];
+
+  /**
+   * Environment variables for the server process
+   */
+  env?: Record<string, string>;
+
+  /**
+   * Working directory for Stdio transport
+   */
+  cwd?: string;
+
+  /**
+   * SSE endpoint URL
+   */
+  url?: string;
+
+  /**
+   * HTTP streaming endpoint URL
+   */
+  httpUrl?: string;
+
+  /**
+   * Request timeout in milliseconds (default: 600,000ms = 10 minutes)
+   */
+  timeout?: number;
+
+  /**
+   * When true, bypasses all tool call confirmations for this server
+   */
+  trust?: boolean;
+}
+
+/**
+ * MCP Server connection status
+ */
+export enum MCPServerStatus {
+  /** Server is disconnected or experiencing errors */
+  DISCONNECTED = 'disconnected',
+  /** Server is in the process of connecting */
+  CONNECTING = 'connecting',
+  /** Server is connected and ready to use */
+  CONNECTED = 'connected',
+}
+
+/**
+ * Overall MCP discovery state
+ */
+export enum MCPDiscoveryState {
+  /** Discovery has not started yet */
+  NOT_STARTED = 'not_started',
+  /** Discovery is currently in progress */
+  IN_PROGRESS = 'in_progress',
+  /** Discovery has completed (with or without errors) */
+  COMPLETED = 'completed',
+}
+
+/**
+ * MCP tool parameters (generic record for external tools)
+ */
+export type MCPToolParams = Record<string, unknown>;
+
+/**
+ * Parameters for the open note tool
+ */
+export interface OpenNoteParams {
+  /**
+   * Exact path to the note file
+   */
+  path?: string;
+
+  /**
+   * Note title for lookup (alternative to path)
+   */
+  title?: string;
+
+  /**
+   * How to open the note: tab (current pane), split (new pane), or window (new window)
+   */
+  paneType?: 'tab' | 'split' | 'window';
+
+  /**
+   * Split direction when paneType is "split"
+   */
+  splitDirection?: 'horizontal' | 'vertical';
+
+  /**
+   * Whether to focus the opened note
+   */
+  focus?: boolean;
+
+  /**
+   * View state configuration for the opened note
+   */
+  viewState?: {
+    mode?: 'source' | 'preview' | 'live';
+    line?: number;
+    column?: number;
+  };
+}
+
+/**
  * Search result item
  */
 export interface SearchResult {
@@ -262,6 +579,14 @@ export interface ObsiusSettings {
     enableReACT: boolean;         // Enable ReACT reasoning methodology
     enableStateGraph: boolean;    // Enable LangGraph-style workflow
     iterationTimeout: number;     // Timeout per iteration in seconds (10-300)
+  };
+
+  // MCP settings
+  mcp: {
+    enabled: boolean;             // Enable MCP functionality
+    servers: Record<string, MCPServerConfig>; // MCP server configurations
+    autoDiscovery: boolean;       // Auto-discover tools on startup
+    defaultTimeout: number;       // Default timeout for MCP operations (ms)
   };
 }
 
