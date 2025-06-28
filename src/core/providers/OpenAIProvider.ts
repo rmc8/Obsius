@@ -52,6 +52,8 @@ export class OpenAIProvider extends BaseProvider {
   constructor(config: OpenAIConfig = { name: 'OpenAI', defaultModel: 'gpt-4' }) {
     super({
       baseUrl: 'https://api.openai.com',
+      timeout: 90000,    // 90 seconds for OpenAI API (AI responses can be slow)
+      maxRetries: 3,     // 3 retries for better reliability
       ...config
     });
     

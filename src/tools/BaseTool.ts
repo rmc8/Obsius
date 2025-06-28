@@ -234,55 +234,106 @@ export abstract class BaseTool<TParams = any> {
    * Convert Zod schema to JSON Schema format for AI providers
    */
   private zodSchemaToJsonSchema(schema: z.ZodSchema): object {
-    // This is a simplified conversion - in a full implementation,
-    // you might want to use a library like zod-to-json-schema
     try {
-      // Get schema description if available
-      const shape = (schema as any)._def?.shape;
-      if (!shape) {
-        return { type: 'object' };
+      // Handle different schema types
+      const schemaDef = (schema as any)._def;
+      
+      // Handle ZodEffects (from .refine())
+      if (schemaDef.typeName === 'ZodEffects') {
+        // For refined schemas, use the inner schema
+        return this.zodSchemaToJsonSchema(schemaDef.schema);
       }
-
-      const properties: Record<string, any> = {};
-      const required: string[] = [];
-
-      for (const [key, fieldSchema] of Object.entries(shape)) {
-        const field = fieldSchema as z.ZodSchema;
-        const fieldDef = (field as any)._def;
-
-        // Extract basic type information
-        if (fieldDef.typeName === 'ZodString') {
-          properties[key] = { type: 'string' };
-        } else if (fieldDef.typeName === 'ZodNumber') {
-          properties[key] = { type: 'number' };
-        } else if (fieldDef.typeName === 'ZodBoolean') {
-          properties[key] = { type: 'boolean' };
-        } else if (fieldDef.typeName === 'ZodArray') {
-          properties[key] = { type: 'array' };
-        } else {
-          properties[key] = { type: 'object' };
+      
+      // Handle ZodObject
+      if (schemaDef.typeName === 'ZodObject') {
+        const shape = schemaDef.shape;
+        if (!shape) {
+          return { type: 'object', properties: {} };
         }
 
-        // Add description if available
-        if (fieldDef.description) {
-          properties[key].description = fieldDef.description;
+        const properties: Record<string, any> = {};
+        const required: string[] = [];
+
+        for (const [key, fieldSchema] of Object.entries(shape)) {
+          const { property, isRequired } = this.convertZodField(fieldSchema as z.ZodSchema);
+          properties[key] = property;
+          
+          if (isRequired) {
+            required.push(key);
+          }
         }
 
-        // Check if field is required (not optional)
-        if (fieldDef.typeName !== 'ZodOptional') {
-          required.push(key);
-        }
+        return {
+          type: 'object',
+          properties,
+          required: required.length > 0 ? required : undefined
+        };
       }
-
-      return {
-        type: 'object',
-        properties,
-        required: required.length > 0 ? required : undefined
-      };
+      
+      // Handle primitive types directly
+      return this.convertZodField(schema).property;
+      
     } catch (error) {
       console.warn(`Failed to convert schema for ${this.name}:`, error);
-      return { type: 'object' };
+      return { 
+        type: 'object',
+        properties: {}
+      };
     }
+  }
+
+  /**
+   * Convert individual Zod field to JSON Schema property
+   */
+  private convertZodField(field: z.ZodSchema): { property: object; isRequired: boolean } {
+    const fieldDef = (field as any)._def;
+    let isRequired = true;
+    let property: any = { type: 'string' }; // default
+    
+    // Handle ZodOptional
+    if (fieldDef.typeName === 'ZodOptional') {
+      const innerResult = this.convertZodField(fieldDef.innerType);
+      innerResult.isRequired = false;
+      return innerResult;
+    }
+    
+    // Handle ZodDefault
+    if (fieldDef.typeName === 'ZodDefault') {
+      const innerResult = this.convertZodField(fieldDef.innerType);
+      (innerResult.property as any).default = fieldDef.defaultValue();
+      return innerResult;
+    }
+    
+    // Handle basic types
+    switch (fieldDef.typeName) {
+      case 'ZodString':
+        property = { type: 'string' };
+        break;
+      case 'ZodNumber':
+        property = { type: 'number' };
+        break;
+      case 'ZodBoolean':
+        property = { type: 'boolean' };
+        break;
+      case 'ZodArray':
+        property = { 
+          type: 'array',
+          items: this.convertZodField(fieldDef.type).property
+        };
+        break;
+      case 'ZodObject':
+        property = this.zodSchemaToJsonSchema(field);
+        break;
+      default:
+        property = { type: 'string' }; // fallback
+    }
+    
+    // Add description if available
+    if (fieldDef.description) {
+      property.description = fieldDef.description;
+    }
+    
+    return { property, isRequired };
   }
 
   /**
