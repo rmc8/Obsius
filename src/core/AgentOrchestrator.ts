@@ -1073,7 +1073,7 @@ export class AgentOrchestrator {
     }));
 
     // Add system prompt with available tools
-    const systemPrompt = this.buildSystemPrompt(context);
+    const systemPrompt = await this.buildSystemPrompt(context);
     messages.unshift({ role: 'system', content: systemPrompt });
 
     // Get available tools for the AI
@@ -1157,7 +1157,7 @@ export class AgentOrchestrator {
     }));
 
     // Add system prompt with available tools
-    const systemPrompt = this.buildSystemPrompt(context);
+    const systemPrompt = await this.buildSystemPrompt(context);
     messages.unshift({ role: 'system', content: systemPrompt });
 
     // Get available tools for the AI
@@ -1215,17 +1215,18 @@ export class AgentOrchestrator {
   /**
    * Build Obsidian-optimized system prompt for knowledge management
    */
-  private buildSystemPrompt(context: ConversationContext): string {
+  private async buildSystemPrompt(context: ConversationContext): Promise<string> {
     const vaultName = this.app.vault.getName();
     const currentFile = context.currentFile;
     const availableTools = this.toolRegistry.getToolNames();
     const enabledToolsCount = this.toolRegistry.getEnabledTools().length;
 
-    return buildLocalizedSystemPrompt({
+    return await buildLocalizedSystemPrompt({
       vaultName,
       currentFile,
       availableTools,
-      enabledToolsCount
+      enabledToolsCount,
+      app: this.app // Pass the app instance for OBSIUS.md reading
     });
   }
 
