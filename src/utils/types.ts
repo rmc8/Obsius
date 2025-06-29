@@ -291,6 +291,41 @@ export interface ReadManyFilesParams {
 }
 
 /**
+ * Parameters for the staged file analysis tool
+ */
+export interface StagedFileAnalysisParams {
+  /**
+   * File patterns to analyze (default: all markdown files)
+   */
+  patterns: string[];
+  
+  /**
+   * Characters to read per file in overview stage (default: 1024)
+   */
+  overviewCharacterLimit: number;
+  
+  /**
+   * Percentage of files to read completely (default: 25%)
+   */
+  deepReadingPercentage: number;
+  
+  /**
+   * Maximum total characters to read across all stages (default: 500,000)
+   */
+  maxTotalCharacters: number;
+  
+  /**
+   * Analysis mode: comprehensive, focused, or technical
+   */
+  analysisMode: 'comprehensive' | 'focused' | 'technical';
+  
+  /**
+   * File patterns to always include in deep reading
+   */
+  forceIncludePatterns?: string[];
+}
+
+/**
  * Parameters for the edit tool
  */
 export interface EditParams {

@@ -20,7 +20,8 @@ import {
   ReadManyFilesTool,
   EditTool,
   OpenNoteTool,
-  ProjectExplorerTool
+  ProjectExplorerTool,
+  StagedFileAnalysisTool
 } from './src/tools';
 import { ExecutionContext, ObsiusSettings, SecureProviderConfig } from './src/utils/types';
 import { ProviderManager } from './src/core/providers/ProviderManager';
@@ -58,10 +59,10 @@ const DEFAULT_SETTINGS: ObsiusSettings = {
   },
   defaultProvider: 'openai',
   tools: {
-    enabled: ['create_note', 'read_note', 'search_notes', 'update_note', 'glob', 'list_directory', 'grep', 'shell', 'web_fetch', 'read_many_files', 'edit', 'open_note', 'project_explorer'],
+    enabled: ['create_note', 'read_note', 'search_notes', 'update_note', 'glob', 'list_directory', 'grep', 'shell', 'web_fetch', 'read_many_files', 'edit', 'open_note', 'project_explorer', 'staged_file_analysis'],
     confirmationRequired: ['update_note'],
     riskLevels: {
-      low: ['create_note', 'read_note', 'search_notes', 'glob', 'list_directory', 'grep', 'web_fetch', 'read_many_files', 'open_note', 'project_explorer'],
+      low: ['create_note', 'read_note', 'search_notes', 'glob', 'list_directory', 'grep', 'web_fetch', 'read_many_files', 'open_note', 'project_explorer', 'staged_file_analysis'],
       medium: ['update_note', 'shell', 'edit'],
       high: []
     }
@@ -264,7 +265,7 @@ export default class ObsiusPlugin extends Plugin {
     console.log('🔧 Validating plugin settings...');
     
     let settingsChanged = false;
-    const criticalTools = ['project_explorer'];
+    const criticalTools = ['project_explorer', 'staged_file_analysis'];
     
     // Ensure critical tools are enabled
     for (const toolName of criticalTools) {
@@ -275,10 +276,16 @@ export default class ObsiusPlugin extends Plugin {
       }
     }
     
-    // Ensure project_explorer is in the correct risk level
+    // Ensure critical tools are in the correct risk levels
     if (!this.settings.tools.riskLevels.low.includes('project_explorer')) {
       console.log('📋 Auto-correcting project_explorer risk level to low');
       this.settings.tools.riskLevels.low.push('project_explorer');
+      settingsChanged = true;
+    }
+    
+    if (!this.settings.tools.riskLevels.low.includes('staged_file_analysis')) {
+      console.log('📋 Auto-correcting staged_file_analysis risk level to low');
+      this.settings.tools.riskLevels.low.push('staged_file_analysis');
       settingsChanged = true;
     }
     
@@ -738,6 +745,27 @@ export default class ObsiusPlugin extends Plugin {
     console.log(`   - Tool metadata: ${!!projectExplorerMetadata}`);
     if (projectExplorerMetadata) {
       console.log(`   - Metadata enabled: ${projectExplorerMetadata.enabled}`);
+    }
+
+    // Register StagedFileAnalysisTool - Enhanced Content Understanding
+    console.log('🧠 Registering StagedFileAnalysisTool...');
+    const stagedAnalysisEnabled = this.settings.tools.enabled.includes('staged_file_analysis');
+    console.log(`   - Enabled in settings: ${stagedAnalysisEnabled}`);
+    
+    this.toolRegistry.registerTool('staged_file_analysis', StagedFileAnalysisTool, {
+      description: 'Intelligent staged analysis: overview all files (1024 chars) then deep-read important files for comprehensive vault understanding',
+      riskLevel: 'low',
+      category: 'content_analysis',
+      enabled: stagedAnalysisEnabled
+    });
+    
+    // Verify registration
+    const stagedAnalysisTool = this.toolRegistry.getTool('staged_file_analysis');
+    const stagedAnalysisMetadata = this.toolRegistry.getToolMetadata('staged_file_analysis');
+    console.log(`   - Tool instance created: ${!!stagedAnalysisTool}`);
+    console.log(`   - Tool metadata: ${!!stagedAnalysisMetadata}`);
+    if (stagedAnalysisMetadata) {
+      console.log(`   - Metadata enabled: ${stagedAnalysisMetadata.enabled}`);
     }
 
     const stats = this.toolRegistry.getStats();

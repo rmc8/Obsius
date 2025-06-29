@@ -32,7 +32,8 @@ export {
   ReadManyFilesTool,
   EditTool,
   OpenNoteTool,
-  ProjectExplorerTool
+  ProjectExplorerTool,
+  StagedFileAnalysisTool
 } from './obsidian';
 
 // Re-export types
@@ -50,6 +51,7 @@ export type {
   EditParams,
   OpenNoteParams,
   ProjectExplorerParams,
+  StagedFileAnalysisParams,
   FileEntry,
   GrepMatch,
   SearchResult,

@@ -5,7 +5,7 @@
 
 import { ItemView, WorkspaceLeaf, Modal } from 'obsidian';
 import ObsiusPlugin from '../../../main';
-import { t, initializeI18n, formatDate, getCommandDescriptions, detectLanguageFromText, setChatLanguage } from '../../utils/i18n';
+import { t, initializeI18n, formatDate, getCommandDescriptions, detectLanguageFromText, setChatLanguage, getEffectiveChatLanguage } from '../../utils/i18n';
 import { AgentOrchestrator, ConversationContext, AgentConfig } from '../../core/AgentOrchestrator';
 import { AssistantResponse, SessionStats } from '../../utils/types';
 import { VaultAnalysisWorkflow, AnalysisProgress, AnalysisData } from '../../core/analysis/VaultAnalysisWorkflow';
@@ -289,36 +289,61 @@ export class ChatView extends ItemView {
    * Force auto-scroll with multiple timing strategies
    */
   private forceAutoScroll(): void {
-    // Multiple scroll attempts with different timings to ensure success
-    requestAnimationFrame(() => this.performScroll());
-    setTimeout(() => this.performScroll(), 10);
-    setTimeout(() => this.performScroll(), 50);
-    setTimeout(() => this.performScroll(), 100);
+    // 🔧 ENHANCED: More aggressive auto-scroll with immediate and delayed attempts
+    this.performScroll(); // Immediate scroll
+    requestAnimationFrame(() => this.performScroll()); // After DOM update
+    setTimeout(() => this.performScroll(), 0); // Next tick
+    setTimeout(() => this.performScroll(), 10); // Short delay
+    setTimeout(() => this.performScroll(), 50); // Medium delay
+    setTimeout(() => this.performScroll(), 100); // Longer delay
+    setTimeout(() => this.performScroll(), 200); // Final attempt
   }
   
   /**
    * Perform the actual scroll operation
    */
   private performScroll(): void {
-    if (!this.terminalContainer) return;
+    if (!this.terminalContainer) {
+      console.warn('⚠️ Terminal container not available for auto-scroll');
+      return;
+    }
     
     const currentScrollTop = this.terminalContainer.scrollTop;
     const scrollHeight = this.terminalContainer.scrollHeight;
     const clientHeight = this.terminalContainer.clientHeight;
+    const scrollBottom = scrollHeight - currentScrollTop - clientHeight;
     
-    // Only scroll if we're not at the bottom (within 50px)
-    if (scrollHeight - currentScrollTop - clientHeight > 50) {
-      this.terminalContainer.scrollTop = scrollHeight;
+    // 🔧 AUTO-FOLLOW: Only scroll when user is already near the bottom (within 50px)
+    // This implements "follow-mode" - only auto-scroll when user is actively at bottom
+    const shouldScroll = scrollBottom <= 50; // User is near bottom, follow new content
+    
+    if (shouldScroll) {
+      // Use smooth scrolling behavior
+      this.terminalContainer.scrollTo({
+        top: scrollHeight,
+        behavior: 'smooth'
+      });
       
-      // Debug scroll operation
-      if (this.debugTreeOutput) {
-        console.log('📜 Auto-scroll performed:', {
-          before: currentScrollTop,
-          after: this.terminalContainer.scrollTop,
-          scrollHeight,
-          clientHeight
-        });
-      }
+      // Fallback: Force immediate scroll if smooth scroll doesn't work
+      setTimeout(() => {
+        this.terminalContainer.scrollTop = scrollHeight;
+      }, 10);
+      
+      // Debug scroll operation (always log for auto-scroll debugging)
+      console.log('📜 Auto-scroll performed:', {
+        before: currentScrollTop,
+        after: 'scrolling to ' + scrollHeight,
+        scrollHeight,
+        clientHeight,
+        scrollBottom,
+        shouldScroll
+      });
+    } else {
+      console.log('📜 Auto-scroll skipped (user scrolled up):', {
+        scrollBottom,
+        threshold: 50,
+        message: 'User has manually scrolled up - respecting their position'
+      });
     }
   }
   
@@ -842,8 +867,8 @@ export class ChatView extends ItemView {
    * Display analysis progress in real-time
    */
   private displayAnalysisProgress(progress: AnalysisProgress): void {
-    // Format phase indicator
-    const phaseIndicator = `[${progress.phaseNumber}/${progress.totalPhases}] ${progress.phase}`;
+    // Format phase indicator without [n/m] notation
+    const phaseIndicator = `${progress.phase}`;
     
     // Display current action
     this.addOutput(`${phaseIndicator}`, 'info');
@@ -999,14 +1024,14 @@ export class ChatView extends ItemView {
       const analysisData = await adaptiveWorkflow.execute();
       const projectProfile = await adaptiveWorkflow.getProjectProfile();
       
-      // Create completely AI-generated OBSIUS.md file
+      // Create concise, localized OBSIUS.md file from final synthesis
       if ((directory === '.' || directory === '' || directory === '/')) {
-        await this.createFullyGeneratedObsiusMdFile(analysisData, projectProfile, workflowConfig.language);
+        await this.createFinalObsiusMdFile(analysisData, workflowConfig.language);
         
         const lang = workflowConfig.language;
         const message = lang === 'ja' ? 
-          '📄 AIによる完全カスタム指示がOBSIUS.mdに保存されました' :
-          '📄 Fully AI-generated custom instructions saved to OBSIUS.md';
+          '📄 簡潔なカスタム指示がOBSIUS.mdに保存されました' :
+          '📄 Concise custom instructions saved to OBSIUS.md';
         this.addOutput(message, 'success');
       }
       
@@ -1225,60 +1250,163 @@ export class ChatView extends ItemView {
   }
   
   /**
-   * Create fully AI-generated OBSIUS.md file with minimal fixed template
+   * Create final OBSIUS.md file from final instruction synthesis
    */
-  private async createFullyGeneratedObsiusMdFile(
+  private async createFinalObsiusMdFile(
     analysisData: AnalysisData, 
-    projectProfile: any, 
+    language: SupportedLanguage
+  ): Promise<void> {
+    try {
+      // Use the final instruction synthesis result if available
+      if (analysisData.finalInstructions?.document) {
+        const content = analysisData.finalInstructions.document;
+        
+        // Save the concise OBSIUS.md file
+        const obsiusFile = this.plugin.app.vault.getAbstractFileByPath('OBSIUS.md');
+        if (obsiusFile) {
+          await this.plugin.app.vault.modify(obsiusFile as any, content);
+        } else {
+          await this.plugin.app.vault.create('OBSIUS.md', content);
+        }
+        return;
+      }
+      
+      // Fallback to legacy method if final synthesis is not available
+      await this.createLegacyObsiusMdFile(analysisData, language);
+      
+    } catch (error) {
+      console.error('Failed to create final OBSIUS.md:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create fully AI-generated OBSIUS.md file with minimal fixed template (legacy)
+   */
+  private async createLegacyObsiusMdFile(
+    analysisData: AnalysisData, 
     language: SupportedLanguage
   ): Promise<void> {
     try {
       const timestamp = new Date().toISOString();
       
-      // Generate completely custom AI instructions
-      const aiGeneratedContent = await this.generateCompletelyCustomInstructions(
-        analysisData, 
-        projectProfile, 
-        language
-      );
+      // Generate basic fallback content in user's language
+      const fallbackContent = language === 'ja' ? 
+        this.generateJapaneseFallbackContent(analysisData) :
+        this.generateEnglishFallbackContent(analysisData);
       
-      // Minimal fixed template - only essential metadata and structure
-      const content = `---
-created: ${timestamp}
-tags:
-  - obsius
-  - ai-instructions
-  - vault-guidance
-analysis_version: "6.0-adaptive"
-analysis_data:
-  complexity: ${projectProfile.complexity}
-  organization_level: ${projectProfile.organizationLevel}
-  phases_executed: ${projectProfile.recommendedPhases}
-  analysis_time: ${projectProfile.estimatedAnalysisTime}
-  primary_domains: ${projectProfile.domains.length}
----
-
-# OBSIUS AI Instructions
-
-${aiGeneratedContent}
-
----
-
-*Re-run \`/init\` to update based on vault changes.*
-`;
-
-      // Save the fully AI-generated OBSIUS.md file
+      // Save the fallback OBSIUS.md file
       const obsiusFile = this.plugin.app.vault.getAbstractFileByPath('OBSIUS.md');
       if (obsiusFile) {
-        await this.plugin.app.vault.modify(obsiusFile as any, content);
+        await this.plugin.app.vault.modify(obsiusFile as any, fallbackContent);
       } else {
-        await this.plugin.app.vault.create('OBSIUS.md', content);
+        await this.plugin.app.vault.create('OBSIUS.md', fallbackContent);
       }
       
     } catch (error) {
-      console.error('Failed to create fully generated OBSIUS.md:', error);
+      console.error('Failed to create legacy OBSIUS.md:', error);
       throw error;
     }
+  }
+
+  /**
+   * Generate Japanese fallback content focused on vault knowledge structure
+   */
+  private generateJapaneseFallbackContent(analysisData: AnalysisData): string {
+    const timestamp = new Date().toISOString();
+    const dateStr = new Date().toLocaleString('ja-JP');
+    
+    // Extract basic knowledge structure information
+    const totalFiles = analysisData.vaultStructure?.totalFiles || 0;
+    const totalFolders = analysisData.vaultStructure?.totalFolders || 0;
+    const primaryDomains = analysisData.insights?.primaryDomains?.slice(0, 5) || [];
+    const workflowPatterns = analysisData.insights?.workflowPatterns?.slice(0, 3) || [];
+    
+    return `---
+created: ${timestamp}
+tags:
+  - obsius
+  - vault-knowledge
+  - knowledge-structure
+language: ja
+---
+
+# ヴォルト知識構造マップ
+
+*${dateStr} 基本分析生成*
+
+## ヴォルト概要
+
+${totalFiles}個のファイル、${totalFolders}個のフォルダを持つ知識管理システム。基本的な構造分析に基づく概要です。
+
+## 検出された知識領域
+
+${primaryDomains.length > 0 ? primaryDomains.map(domain => `- ${domain}`).join('\n') : '- 一般的なコンテンツ領域'}
+
+## 組織パターン
+
+${workflowPatterns.length > 0 ? workflowPatterns.map(pattern => `- ${pattern}`).join('\n') : '- 標準的なフォルダ構造\n- ファイルベースの組織化'}
+
+## ヴォルト特性
+
+- **ファイル規模**: ${totalFiles < 50 ? '小規模' : totalFiles < 200 ? '中規模' : '大規模'}なコレクション
+- **組織レベル**: ${totalFolders < 5 ? '基本的' : totalFolders < 15 ? '構造化された' : '高度な'}フォルダ構造
+- **内容の焦点**: ${primaryDomains.length > 3 ? '多分野' : primaryDomains.length > 1 ? '複数分野' : '特化分野'}の知識管理
+
+---
+
+*このマップは基本分析に基づいています。詳細な知識構造分析については \`/init\` で完全分析を実行してください。*
+`;
+  }
+
+  /**
+   * Generate English fallback content focused on vault knowledge structure
+   */
+  private generateEnglishFallbackContent(analysisData: AnalysisData): string {
+    const timestamp = new Date().toISOString();
+    const dateStr = new Date().toLocaleString('en-US');
+    
+    // Extract basic knowledge structure information
+    const totalFiles = analysisData.vaultStructure?.totalFiles || 0;
+    const totalFolders = analysisData.vaultStructure?.totalFolders || 0;
+    const primaryDomains = analysisData.insights?.primaryDomains?.slice(0, 5) || [];
+    const workflowPatterns = analysisData.insights?.workflowPatterns?.slice(0, 3) || [];
+    
+    return `---
+created: ${timestamp}
+tags:
+  - obsius
+  - vault-knowledge
+  - knowledge-structure
+language: en
+---
+
+# Vault Knowledge Structure Map
+
+*Generated ${dateStr} - Basic Analysis*
+
+## Vault Overview
+
+Knowledge management system with ${totalFiles} files across ${totalFolders} folders. Overview based on basic structural analysis.
+
+## Detected Knowledge Domains
+
+${primaryDomains.length > 0 ? primaryDomains.map(domain => `- ${domain}`).join('\n') : '- General content areas'}
+
+## Organization Patterns
+
+${workflowPatterns.length > 0 ? workflowPatterns.map(pattern => `- ${pattern}`).join('\n') : '- Standard folder structure\n- File-based organization'}
+
+## Vault Characteristics
+
+- **File Scale**: ${totalFiles < 50 ? 'Small' : totalFiles < 200 ? 'Medium' : 'Large'} collection
+- **Organization Level**: ${totalFolders < 5 ? 'Basic' : totalFolders < 15 ? 'Structured' : 'Sophisticated'} folder structure
+- **Content Focus**: ${primaryDomains.length > 3 ? 'Multi-domain' : primaryDomains.length > 1 ? 'Cross-domain' : 'Specialized'} knowledge management
+
+---
+
+*This map is based on basic analysis. For detailed knowledge structure analysis, run \`/init\` for comprehensive analysis.*
+`;
   }
 
   /**
@@ -1289,6 +1417,18 @@ ${aiGeneratedContent}
     projectProfile: any,
     language: SupportedLanguage
   ): Promise<string> {
+    // 🎯 PRIORITY: Use dynamic instructions if available (from DynamicInstructionFormatterNode)
+    if (analysisData.formattedInstructions?.fullDocument) {
+      console.log('✅ Using dynamic AI-generated instructions from analysis workflow');
+      // Return the AI-generated dynamic content directly
+      return analysisData.formattedInstructions.fullDocument
+        .replace(/^---[\s\S]*?---\n/, '') // Remove frontmatter if present
+        .replace(/^# OBSIUS AI Instructions\n/, ''); // Remove title if present
+    }
+
+    // 🔄 FALLBACK: Traditional AI generation if dynamic instructions not available
+    console.log('⚠️ Dynamic instructions not available, falling back to AgentOrchestrator generation');
+    
     if (!this.agentOrchestrator) {
       return language === 'ja' ? 
         'このヴォルトは包括的な知識管理システムとして機能します。詳細なAI分析にはAgentOrchestratorが必要です。' :
@@ -1821,8 +1961,16 @@ Generate comprehensive, specific instructions covering:
       if (this.agentOrchestrator && (keyFileSamples || structure)) {
         
         try {
+          // Get effective language for analysis
+          const effectiveLanguage = getEffectiveChatLanguage();
+          const languageInstruction = effectiveLanguage === 'ja' 
+            ? '[日本語必須] この分析と全ての出力は必ず日本語で行ってください。英語は一切使用しないでください。'
+            : '[ENGLISH REQUIRED] Perform this analysis and provide all output in English only.';
+
           // Prepare content for AI analysis with enhanced Claude Code quality approach
-          const analysisPrompt = `[COMPREHENSIVE VAULT ANALYSIS - CLAUDE CODE QUALITY LEVEL]
+          const analysisPrompt = `${languageInstruction}
+
+[COMPREHENSIVE VAULT ANALYSIS - CLAUDE CODE QUALITY LEVEL]
 
 You are an expert AI agent analyzer tasked with creating comprehensive, actionable instructions for working with this specific Obsidian vault. Your analysis MUST be concrete, specific, and directly based on the actual structure and content provided.
 

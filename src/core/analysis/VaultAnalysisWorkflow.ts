@@ -5,6 +5,9 @@
 
 import { App, TFile, TFolder } from 'obsidian';
 import { ToolRegistry } from '../../tools/ToolRegistry';
+import { ProjectCharacteristicDetector, ProjectProfile } from './ProjectCharacteristicDetector';
+import { AdaptiveWorkflowEngine, WorkflowStrategy } from './AdaptiveWorkflowEngine';
+import { LocalizedAnalysisReporter, SupportedLanguage } from './LocalizedAnalysisReporter';
 
 /**
  * Analysis progress information for real-time display
@@ -55,6 +58,55 @@ export interface AnalysisData {
     primaryDomains: string[];
     workflowPatterns: string[];
     organizationPrinciples: string[];
+  };
+  // NEW: Deep content analysis data from DeepContentDiscoveryNode
+  deepContent?: {
+    folderSummaries: any[];
+    globalPatterns: any;
+    readFiles: any[];
+    documentTypes: Map<string, number>;
+    contentCategories: Map<string, string[]>;
+  };
+  
+  // Enhanced content analysis data from EnhancedDeepContentDiscoveryNode
+  enhancedContent?: {
+    stagingResults: any;
+    contentDistribution: any;
+    knowledgePatterns: any;
+    vaultCharacteristics: any;
+    workflowRecommendations: any;
+    representativeFiles: any[];
+  };
+  
+  // Project characteristics for enhanced analysis
+  projectCharacteristics?: {
+    complexity?: string;
+    organizationLevel?: string;
+    contentFocus?: string;
+    knowledgeDepth?: string;
+  };
+  
+  // Dynamic instructions from DynamicInstructionGeneratorNode
+  dynamicInstructions?: {
+    instructions: any;
+    semanticAnalysis: any;
+    generatedAt: Date;
+    vaultSignature: string;
+  };
+  
+  // Formatted instructions from DynamicInstructionFormatterNode
+  formattedInstructions?: {
+    metadata: any;
+    sections: any;
+    fullDocument: string;
+  };
+  
+  // Final instructions from FinalInstructionSynthesisNode
+  finalInstructions?: {
+    document: string;
+    language: string;
+    generatedAt: string;
+    characterCount: number;
   };
 }
 
@@ -215,20 +267,168 @@ export class DiscoveryNode extends AnalysisNode {
  * Phase 2: Content Analysis Node - Deep content pattern analysis
  */
 export class ContentAnalysisNode extends AnalysisNode {
-  get name(): string { return "📄 Content Pattern Analysis"; }
-  get description(): string { return "Analyzing content patterns, frontmatter, and file structures"; }
+  get name(): string { return "📄 Enhanced Content Pattern Analysis"; }
+  get description(): string { return "Deep analysis of content patterns using folder-specific insights from deep discovery"; }
 
   async execute(data: AnalysisData): Promise<AnalysisData> {
     this.reportProgress(
-      "Analyzing content patterns...",
-      "Examining representative files to identify organizational patterns",
+      "Performing enhanced content pattern analysis...",
+      "Leveraging deep content discovery data for comprehensive pattern analysis",
       [],
-      2
+      3
     );
 
-    await this.think(1200);
+    await this.think(800);
 
-    // Get key files for analysis
+    // Use deep content analysis if available, otherwise fallback to traditional method
+    if (data.deepContent && data.deepContent.readFiles.length > 0) {
+      return await this.performDeepContentAnalysis(data);
+    } else {
+      return await this.performTraditionalContentAnalysis(data);
+    }
+  }
+
+  /**
+   * Enhanced content analysis using deep content discovery data
+   */
+  private async performDeepContentAnalysis(data: AnalysisData): Promise<AnalysisData> {
+    this.reportProgress(
+      "Analyzing deep content patterns...",
+      "Processing detailed content from comprehensive file reading",
+      [`📖 ${data.deepContent!.readFiles.length} files analyzed`],
+      3
+    );
+
+    const frontmatterFields = new Map<string, number>();
+    const tagCategories = new Map<string, number>();
+    const linkPatterns: string[] = [];
+    const namingConventions: string[] = [];
+    const folderSpecificPatterns = new Map<string, string[]>();
+
+    // Analyze each read file comprehensively
+    for (const fileData of data.deepContent!.readFiles) {
+      const { path, content } = fileData;
+      const folderPath = this.extractFolderPath(path);
+
+      // Extract frontmatter patterns
+      const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+      if (frontmatterMatch) {
+        const frontmatter = frontmatterMatch[1];
+        const fields = frontmatter.match(/^(\w+):/gm);
+        if (fields) {
+          for (const field of fields) {
+            const fieldName = field.replace(':', '');
+            frontmatterFields.set(fieldName, (frontmatterFields.get(fieldName) || 0) + 1);
+          }
+        }
+
+        // Extract tags from frontmatter
+        const tagsMatch = frontmatter.match(/tags:\s*(?:\[([^\]]+)\]|(\[[\s\S]*?\]))/);
+        if (tagsMatch) {
+          const tagsContent = tagsMatch[1] || tagsMatch[2];
+          const tags = tagsContent.split(',').map((t: string) => t.trim().replace(/["\[\]]/g, ''));
+          for (const tag of tags) {
+            if (tag) {
+              const category = tag.split('/')[0];
+              tagCategories.set(category, (tagCategories.get(category) || 0) + 1);
+            }
+          }
+        }
+      }
+
+      // Extract alternative tag patterns (YAML list format)
+      const yamlTagMatches = content.match(/^tags:\s*\n(\s*-\s*[^\n]+\n)+/m);
+      if (yamlTagMatches) {
+        const tagLines = yamlTagMatches[0].match(/^\s*-\s*(.+)$/gm);
+        if (tagLines) {
+          for (const tagLine of tagLines) {
+            const tag = tagLine.replace(/^\s*-\s*/, '').trim();
+            const category = tag.split('/')[0];
+            tagCategories.set(category, (tagCategories.get(category) || 0) + 1);
+          }
+        }
+      }
+
+      // Analyze internal links
+      const internalLinks = content.match(/\[\[([^\]]+)\]\]/g);
+      if (internalLinks) {
+        linkPatterns.push(`${folderPath}: ${internalLinks.length} internal links`);
+      }
+
+      // Analyze external links
+      const externalLinks = content.match(/\[([^\]]+)\]\(https?:\/\/[^\)]+\)/g);
+      if (externalLinks) {
+        linkPatterns.push(`${folderPath}: ${externalLinks.length} external links`);
+      }
+
+      // Extract file naming patterns
+      const fileName = path.split('/').pop()?.replace('.md', '') || '';
+      this.analyzeNamingPattern(fileName, namingConventions);
+
+      // Store folder-specific patterns
+      if (!folderSpecificPatterns.has(folderPath)) {
+        folderSpecificPatterns.set(folderPath, []);
+      }
+      
+      const patterns = folderSpecificPatterns.get(folderPath)!;
+      if (content.includes('```')) patterns.push('Code blocks');
+      if (content.match(/^#+\s/m)) patterns.push('Structured headers');
+      if (content.includes('- [ ]') || content.includes('- [x]')) patterns.push('Task lists');
+      if (frontmatterMatch) patterns.push('Frontmatter metadata');
+    }
+
+    await this.think(1000);
+
+    // Analyze folder-specific content characteristics
+    const folderInsights = this.analyzeFolderSpecificPatterns(data.deepContent!.folderSummaries, folderSpecificPatterns);
+
+    const thinking = this.createThinkingChain(
+      `Comprehensively analyzed ${data.deepContent!.readFiles.length} files across ${folderSpecificPatterns.size} folders`,
+      `Rich content patterns reveal sophisticated organizational system with folder-specific conventions`,
+      `The vault demonstrates mature content management with consistent metadata and structured approaches`,
+      `AI agents should leverage folder-specific patterns and established content conventions`
+    );
+
+    const discoveries = [
+      `📝 ${frontmatterFields.size} frontmatter fields across all content`,
+      `🏷️ ${tagCategories.size} tag categories discovered`,
+      `📁 ${folderSpecificPatterns.size} folders with specific content patterns`,
+      `🔗 ${linkPatterns.length} linking patterns identified`,
+      `📋 ${namingConventions.length} naming conventions detected`,
+      ...folderInsights
+    ];
+
+    this.reportProgress(
+      "Enhanced content pattern analysis complete",
+      `${thinking.observation}. ${thinking.analysis}. ${thinking.hypothesis}.`,
+      discoveries,
+      3,
+      true
+    );
+
+    // Update analysis data with comprehensive patterns
+    data.contentPatterns = {
+      frontmatterFields,
+      tagCategories,
+      linkPatterns,
+      namingConventions
+    };
+
+    return data;
+  }
+
+  /**
+   * Traditional content analysis fallback
+   */
+  private async performTraditionalContentAnalysis(data: AnalysisData): Promise<AnalysisData> {
+    this.reportProgress(
+      "Performing traditional content analysis...",
+      "Using ProjectExplorer for content pattern analysis (fallback mode)",
+      [],
+      3
+    );
+
+    // Original implementation as fallback
     const explorerResult = await this.toolRegistry.executeTool('project_explorer', {
       directory: '.',
       maxItems: 100,
@@ -243,7 +443,7 @@ export class ContentAnalysisNode extends AnalysisNode {
     const linkPatterns: string[] = [];
     const namingConventions: string[] = [];
 
-    // Analyze key file content samples
+    // Original analysis logic...
     if (explorerResult.success && explorerResult.data?.structure) {
       const keyFileSamples = explorerResult.data.structure.match(/📄 KEY FILE CONTENT SAMPLES:([\s\S]*?)$/);
       if (keyFileSamples) {
@@ -268,7 +468,7 @@ export class ContentAnalysisNode extends AnalysisNode {
         if (tagMatches) {
           for (const match of tagMatches) {
             const tag = match.replace(/tags:\s*\n\s*-\s*/, '').trim();
-            const category = tag.split('/')[0]; // First part of hierarchical tags
+            const category = tag.split('/')[0];
             tagCategories.set(category, (tagCategories.get(category) || 0) + 1);
           }
         }
@@ -289,13 +489,11 @@ export class ContentAnalysisNode extends AnalysisNode {
       }
     }
 
-    await this.think(800);
-
     const thinking = this.createThinkingChain(
       `Analyzed ${frontmatterFields.size} frontmatter fields and ${tagCategories.size} tag categories`,
-      `Strong consistency in metadata usage indicates mature organizational system`,
-      `The vault follows established PKM conventions with personal customizations`,
-      `AI agents should respect and leverage these established patterns`
+      `Basic content pattern analysis completed using traditional sampling`,
+      `The vault shows organizational patterns that would benefit from deeper analysis`,
+      `Enhanced analysis would provide more comprehensive insights`
     );
 
     const discoveries = [
@@ -306,14 +504,13 @@ export class ContentAnalysisNode extends AnalysisNode {
     ];
 
     this.reportProgress(
-      "Content pattern analysis complete",
+      "Traditional content pattern analysis complete",
       `${thinking.observation}. ${thinking.analysis}. ${thinking.hypothesis}.`,
       discoveries,
-      2,
+      3,
       true
     );
 
-    // Update analysis data
     data.contentPatterns = {
       frontmatterFields,
       tagCategories,
@@ -322,6 +519,59 @@ export class ContentAnalysisNode extends AnalysisNode {
     };
 
     return data;
+  }
+
+  /**
+   * Analyze naming patterns from filename
+   */
+  private analyzeNamingPattern(fileName: string, conventions: string[]): void {
+    if (fileName.match(/^\d{4}-\d{2}-\d{2}/)) {
+      if (!conventions.includes('Date-prefixed (YYYY-MM-DD)')) {
+        conventions.push('Date-prefixed (YYYY-MM-DD)');
+      }
+    }
+    if (fileName.match(/^[A-Z][a-z]+[A-Z]/)) {
+      if (!conventions.includes('CamelCase')) {
+        conventions.push('CamelCase');
+      }
+    }
+    if (fileName.includes('_')) {
+      if (!conventions.includes('Underscore_separated')) {
+        conventions.push('Underscore_separated');
+      }
+    }
+    if (fileName.includes('-')) {
+      if (!conventions.includes('Hyphen-separated')) {
+        conventions.push('Hyphen-separated');
+      }
+    }
+  }
+
+  /**
+   * Analyze folder-specific content patterns
+   */
+  private analyzeFolderSpecificPatterns(
+    folderSummaries: any[], 
+    folderPatterns: Map<string, string[]>
+  ): string[] {
+    const insights: string[] = [];
+    
+    for (const summary of folderSummaries) {
+      const patterns = folderPatterns.get(summary.folderPath);
+      if (patterns && patterns.length > 0) {
+        insights.push(`📁 ${summary.folderPath}: ${patterns.join(', ')}`);
+      }
+    }
+    
+    return insights;
+  }
+
+  /**
+   * Extract folder path from file path
+   */
+  private extractFolderPath(filePath: string): string {
+    const lastSlash = filePath.lastIndexOf('/');
+    return lastSlash > 0 ? filePath.substring(0, lastSlash) : '.';
   }
 }
 
