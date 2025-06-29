@@ -291,6 +291,41 @@ export interface ReadManyFilesParams {
 }
 
 /**
+ * Parameters for the staged file analysis tool
+ */
+export interface StagedFileAnalysisParams {
+  /**
+   * File patterns to analyze (default: all markdown files)
+   */
+  patterns: string[];
+  
+  /**
+   * Characters to read per file in overview stage (default: 1024)
+   */
+  overviewCharacterLimit: number;
+  
+  /**
+   * Percentage of files to read completely (default: 25%)
+   */
+  deepReadingPercentage: number;
+  
+  /**
+   * Maximum total characters to read across all stages (default: 500,000)
+   */
+  maxTotalCharacters: number;
+  
+  /**
+   * Analysis mode: comprehensive, focused, or technical
+   */
+  analysisMode: 'comprehensive' | 'focused' | 'technical';
+  
+  /**
+   * File patterns to always include in deep reading
+   */
+  forceIncludePatterns?: string[];
+}
+
+/**
  * Parameters for the edit tool
  */
 export interface EditParams {
@@ -313,6 +348,51 @@ export interface EditParams {
    * Number of replacements expected (defaults to 1)
    */
   expected_replacements?: number;
+}
+
+/**
+ * Parameters for the project explorer tool
+ */
+export interface ProjectExplorerParams {
+  /**
+   * Directory to explore (relative to vault root, defaults to vault root)
+   */
+  directory?: string;
+
+  /**
+   * Maximum number of items to process (50-1000, default: 200)
+   */
+  maxItems?: number;
+
+  /**
+   * Whether to include file content preview (increases output size)
+   */
+  includeFileContent?: boolean;
+
+  /**
+   * File extensions to focus on (e.g., ["md", "ts", "js"])
+   */
+  fileTypes?: string[];
+
+  /**
+   * Whether to respect .gitignore patterns
+   */
+  respectGitIgnore?: boolean;
+
+  /**
+   * Maximum directory depth to explore (1-10, default: 5)
+   */
+  maxDepth?: number;
+
+  /**
+   * Maximum number of directories to scan (10-500, helps with performance on large projects)
+   */
+  maxDirs?: number;
+
+  /**
+   * Whether to include content sampling from key project files for enhanced analysis
+   */
+  includeKeyFiles?: boolean;
 }
 
 // ============================================================================

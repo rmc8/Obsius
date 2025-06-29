@@ -726,17 +726,92 @@ export function getSystemPromptTranslations(language: SupportedLanguage) {
 }
 
 /**
- * Build localized system prompt with context
+ * Read and parse OBSIUS.md file for vault-specific instructions
  */
-export function buildLocalizedSystemPrompt(context: {
+async function readObsiusMdInstructions(app: any): Promise<string | null> {
+  try {
+    // Check if OBSIUS.md exists in vault root
+    const obsiusFile = app.vault.getAbstractFileByPath('OBSIUS.md');
+    if (!obsiusFile) {
+      return null;
+    }
+
+    // Read file content
+    const content = await app.vault.read(obsiusFile);
+    if (!content || typeof content !== 'string') {
+      return null;
+    }
+
+    // Extract content after the front matter and before the footer
+    const lines = content.split('\n');
+    let startIndex = -1;
+    let endIndex = lines.length;
+
+    // Find the end of frontmatter (second ---)
+    let frontmatterCount = 0;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].trim() === '---') {
+        frontmatterCount++;
+        if (frontmatterCount === 2) {
+          startIndex = i + 1;
+          break;
+        }
+      }
+    }
+
+    // Find the start of footer (---)
+    for (let i = startIndex + 1; i < lines.length; i++) {
+      if (lines[i].trim() === '---') {
+        endIndex = i;
+        break;
+      }
+    }
+
+    if (startIndex === -1) {
+      // No frontmatter, start from beginning
+      startIndex = 0;
+    }
+
+    // Extract the main instruction content
+    const instructionLines = lines.slice(startIndex, endIndex);
+    const instructions = instructionLines.join('\n').trim();
+
+    // Remove the main heading if present
+    const cleanedInstructions = instructions
+      .replace(/^#\s*OBSIUS AI Instructions\s*\n*/i, '')
+      .trim();
+
+    return cleanedInstructions || null;
+
+  } catch (error) {
+    console.warn('Failed to read OBSIUS.md instructions:', error);
+    return null;
+  }
+}
+
+/**
+ * Build localized system prompt with context and vault-specific instructions
+ */
+export async function buildLocalizedSystemPrompt(context: {
   vaultName: string;
   currentFile?: string;
   availableTools: string[];
   enabledToolsCount: number;
-}): string {
+  app?: any; // Obsidian App instance for reading OBSIUS.md
+}): Promise<string> {
   const effectiveLanguage = getEffectiveChatLanguage();
   const sp = getSystemPromptTranslations(effectiveLanguage);
   const currentLang = effectiveLanguage === 'ja' ? '日本語' : 'English';
+  
+  // Try to read vault-specific instructions from OBSIUS.md
+  let vaultSpecificInstructions: string | null = null;
+  if (context.app) {
+    try {
+      vaultSpecificInstructions = await readObsiusMdInstructions(context.app);
+    } catch (error) {
+      console.warn('Failed to load OBSIUS.md instructions:', error);
+    }
+  }
   
   // Create strong language instruction at the beginning
   const languageHeader = effectiveLanguage === 'ja' 
@@ -774,7 +849,25 @@ export function buildLocalizedSystemPrompt(context: {
     sp.environment,
     `- **Vault**: ${context.vaultName} | **File**: ${context.currentFile || 'None'} | **Language**: ${currentLang}`,
     `- **Tools**: ${context.enabledToolsCount} enabled (${context.availableTools.join(', ')})`,
-    '',
+    ''
+  ];
+
+  // Add vault-specific instructions if available
+  if (vaultSpecificInstructions) {
+    const vaultInstructionsHeader = effectiveLanguage === 'ja' 
+      ? '## ヴォルト固有指示（OBSIUS.md より）'
+      : '## Vault-Specific Instructions (from OBSIUS.md)';
+    
+    sections.push(
+      vaultInstructionsHeader,
+      '',
+      vaultSpecificInstructions,
+      ''
+    );
+  }
+
+  // Continue with standard examples and guidelines
+  sections.push(
     sp.responseRules,
     sp.responseGuidelines,
     '',
@@ -791,7 +884,7 @@ export function buildLocalizedSystemPrompt(context: {
     sp.remember,
     '',
     sp.languageInstruction.replace('{language}', currentLang)
-  ];
+  );
   
   return sections.join('\n');
 }

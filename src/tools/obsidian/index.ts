@@ -15,6 +15,8 @@ export { WebFetchTool } from './WebFetchTool';
 export { ReadManyFilesTool } from './ReadManyFilesTool';
 export { EditTool } from './EditTool';
 export { OpenNoteTool } from './OpenNoteTool';
+export { ProjectExplorerTool } from './ProjectExplorerTool';
+export { StagedFileAnalysisTool } from './StagedFileAnalysisTool';
 
 // Re-export types for convenience
 export type {
@@ -30,6 +32,8 @@ export type {
   ReadManyFilesParams,
   EditParams,
   OpenNoteParams,
+  ProjectExplorerParams,
+  StagedFileAnalysisParams,
   FileEntry,
   GrepMatch,
   SearchResult,

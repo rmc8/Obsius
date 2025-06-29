@@ -332,15 +332,66 @@ export class AgentOrchestrator {
   }
 
   /**
+   * Check if the task is analysis-only (no actions required)
+   */
+  private isAnalysisOnlyTask(userInput: string): boolean {
+    const lowercaseInput = userInput.toLowerCase();
+    
+    // Analysis-only indicators
+    const analysisPatterns = [
+      'analyze this obsidian vault',
+      'provide a comprehensive but concise analysis',
+      'what type of knowledge vault is this',
+      'what domains of knowledge are represented',
+      'how is the content organized',
+      'what notable organizational features',
+      'what can you infer about',
+      'focused on knowledge management',
+      'based on the actual content',
+      'keep responses focused and practical'
+    ];
+    
+    // Check if input contains analysis-only patterns
+    const hasAnalysisPatterns = analysisPatterns.some(pattern => 
+      lowercaseInput.includes(pattern)
+    );
+    
+    // Check for analysis keywords in context of vault structure
+    const hasAnalysisContext = 
+      lowercaseInput.includes('vault structure') ||
+      lowercaseInput.includes('key file content samples') ||
+      lowercaseInput.includes('knowledge management') ||
+      (lowercaseInput.includes('analyze') && lowercaseInput.includes('vault'));
+    
+    // Check if it's explicitly requesting analysis without actions
+    const isExplicitAnalysis = 
+      lowercaseInput.includes('please analyze') ||
+      lowercaseInput.includes('provide insights') ||
+      lowercaseInput.includes('analysis focused on');
+    
+    return hasAnalysisPatterns || hasAnalysisContext || isExplicitAnalysis;
+  }
+
+  /**
    * Assess task complexity for routing decisions
    */
   private assessTaskComplexity(userInput: string): boolean {
     const lowercaseInput = userInput.toLowerCase();
     
+    // Check if this is an analysis-only task first
+    if (this.isAnalysisOnlyTask(userInput)) {
+      // Complex analysis prompts (like vault analysis) need full workflow for proper AI processing
+      if (userInput.includes('COMPREHENSIVE VAULT ANALYSIS') || 
+          userInput.includes('ANALYSIS FRAMEWORK') ||
+          userInput.length > 1000) {
+        return false; // Complex analysis needs full workflow
+      }
+      return true; // Simple analysis tasks are simple
+    }
+    
     // Complex task indicators that require full workflow
     const complexIndicators = [
       'organize',
-      'analyze',
       'research',
       'comprehensive',
       'detailed',
@@ -607,6 +658,16 @@ export class AgentOrchestrator {
     const successfulActions = workflowState.executedActions.filter(a => a.result?.success);
     
     if (successfulActions.length === 0) {
+      // Check if this is an analysis task that should return the AI's actual analysis content
+      if (workflowState.currentObjective?.includes('ANALYSIS') || 
+          workflowState.originalRequest?.includes('[ANALYSIS ONLY') ||
+          workflowState.originalRequest?.includes('COMPREHENSIVE VAULT ANALYSIS')) {
+        // For analysis tasks, look for AI response content in conversation history
+        const lastMessage = this.conversationHistory[this.conversationHistory.length - 1];
+        if (lastMessage?.content && lastMessage.content !== 'I completed analyzing your request.') {
+          return lastMessage.content;
+        }
+      }
       return 'I completed analyzing your request.';
     }
     
@@ -1012,7 +1073,7 @@ export class AgentOrchestrator {
     }));
 
     // Add system prompt with available tools
-    const systemPrompt = this.buildSystemPrompt(context);
+    const systemPrompt = await this.buildSystemPrompt(context);
     messages.unshift({ role: 'system', content: systemPrompt });
 
     // Get available tools for the AI
@@ -1096,7 +1157,7 @@ export class AgentOrchestrator {
     }));
 
     // Add system prompt with available tools
-    const systemPrompt = this.buildSystemPrompt(context);
+    const systemPrompt = await this.buildSystemPrompt(context);
     messages.unshift({ role: 'system', content: systemPrompt });
 
     // Get available tools for the AI
@@ -1154,17 +1215,18 @@ export class AgentOrchestrator {
   /**
    * Build Obsidian-optimized system prompt for knowledge management
    */
-  private buildSystemPrompt(context: ConversationContext): string {
+  private async buildSystemPrompt(context: ConversationContext): Promise<string> {
     const vaultName = this.app.vault.getName();
     const currentFile = context.currentFile;
     const availableTools = this.toolRegistry.getToolNames();
     const enabledToolsCount = this.toolRegistry.getEnabledTools().length;
 
-    return buildLocalizedSystemPrompt({
+    return await buildLocalizedSystemPrompt({
       vaultName,
       currentFile,
       availableTools,
-      enabledToolsCount
+      enabledToolsCount,
+      app: this.app // Pass the app instance for OBSIUS.md reading
     });
   }
 
