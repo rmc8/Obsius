@@ -1194,8 +1194,10 @@ export class ChatView extends ItemView {
       if (this.agentOrchestrator && (keyFileSamples || structure)) {
         
         try {
-          // Prepare content for AI analysis
-          const analysisPrompt = `Analyze this Obsidian Vault based on the following structure and key file samples. Provide a comprehensive but concise analysis focused on knowledge management.
+          // Prepare content for AI analysis with explicit analysis-only markers
+          const analysisPrompt = `[ANALYSIS ONLY - NO ACTIONS REQUIRED]
+
+Analyze this Obsidian Vault based on the following structure and key file samples. Provide a comprehensive but concise analysis focused on knowledge management. This is a pure analysis task - please provide insights only, no tool execution is needed.
 
 **Vault Structure Summary:**
 - Total Files: ${totalFiles}
@@ -1207,19 +1209,21 @@ ${structureForAI}
 ${keyFileSamples ? `**Key File Content Samples:**
 ${keyFileSamples}` : ''}
 
-Please analyze this vault and provide:
+Please analyze this vault and provide specific insights for:
 
 1. **Vault Type**: What type of knowledge vault is this? (e.g., "Personal Journal", "Research Vault", "Project Management", "Learning Notes", etc.)
 
-2. **Knowledge Areas**: What domains of knowledge are represented? List 3-5 main areas.
+2. **Knowledge Areas**: What domains of knowledge are represented? List 3-5 main areas based on actual content.
 
-3. **Organization Strategy**: How is the content organized? What patterns do you see?
+3. **Organization Strategy**: How is the content organized? What patterns do you see in the folder structure and file organization?
 
-4. **Key Features**: What notable organizational features or workflows are evident?
+4. **Key Features**: What notable organizational features or workflows are evident from the structure and content?
 
-5. **Knowledge Management Insights**: What can you infer about the owner's knowledge management approach?
+5. **Knowledge Management Insights**: What can you infer about the owner's knowledge management approach based on the actual vault structure?
 
-Please provide specific, actionable insights based on the actual content, not generic advice. Keep responses focused and practical for knowledge management in Obsidian.`;
+Focus your analysis on the actual content and structure provided above. Provide specific, actionable insights based on the real data, not generic advice. Keep responses focused and practical for knowledge management in Obsidian.
+
+[ANALYSIS TASK - RESPOND WITH INSIGHTS ONLY]`;
 
           // Get AI analysis
           const context: ConversationContext = {

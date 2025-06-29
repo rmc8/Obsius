@@ -332,15 +332,60 @@ export class AgentOrchestrator {
   }
 
   /**
+   * Check if the task is analysis-only (no actions required)
+   */
+  private isAnalysisOnlyTask(userInput: string): boolean {
+    const lowercaseInput = userInput.toLowerCase();
+    
+    // Analysis-only indicators
+    const analysisPatterns = [
+      'analyze this obsidian vault',
+      'provide a comprehensive but concise analysis',
+      'what type of knowledge vault is this',
+      'what domains of knowledge are represented',
+      'how is the content organized',
+      'what notable organizational features',
+      'what can you infer about',
+      'focused on knowledge management',
+      'based on the actual content',
+      'keep responses focused and practical'
+    ];
+    
+    // Check if input contains analysis-only patterns
+    const hasAnalysisPatterns = analysisPatterns.some(pattern => 
+      lowercaseInput.includes(pattern)
+    );
+    
+    // Check for analysis keywords in context of vault structure
+    const hasAnalysisContext = 
+      lowercaseInput.includes('vault structure') ||
+      lowercaseInput.includes('key file content samples') ||
+      lowercaseInput.includes('knowledge management') ||
+      (lowercaseInput.includes('analyze') && lowercaseInput.includes('vault'));
+    
+    // Check if it's explicitly requesting analysis without actions
+    const isExplicitAnalysis = 
+      lowercaseInput.includes('please analyze') ||
+      lowercaseInput.includes('provide insights') ||
+      lowercaseInput.includes('analysis focused on');
+    
+    return hasAnalysisPatterns || hasAnalysisContext || isExplicitAnalysis;
+  }
+
+  /**
    * Assess task complexity for routing decisions
    */
   private assessTaskComplexity(userInput: string): boolean {
     const lowercaseInput = userInput.toLowerCase();
     
+    // Check if this is an analysis-only task first
+    if (this.isAnalysisOnlyTask(userInput)) {
+      return true; // Analysis-only tasks are simple
+    }
+    
     // Complex task indicators that require full workflow
     const complexIndicators = [
       'organize',
-      'analyze',
       'research',
       'comprehensive',
       'detailed',
