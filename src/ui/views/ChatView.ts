@@ -1377,28 +1377,42 @@ ${this.formatDeepContentAnalysis(analysisData, 'ja')}
 - 特殊ノード: ${projectProfile.specializedNodes?.join(', ') || 'なし'}
 - スケール課題: ${projectProfile.scaleChallenges?.join(', ') || 'なし'}
 
-## 強化された生成要件:
-1. 固定テンプレートなし - 完全にカスタム構造を作成
-2. ヴォルト固有の見出しを実際のコンテンツに基づいて作成
-3. 自然な日本語での説明
-4. 観察されたパターンに基づく具体的ワークフロー
-5. 実際のフォルダ/ファイル名を使用した具体例
-6. このヴォルトの正確な特性に基づくドメイン固有ガイダンス
-7. **技術プロジェクト特化** - コード構造、テスト、ビルド設定への配慮
-8. **実行可能ワークフロー** - 具体的なコマンドとステップを含む指示
-9. **開発ライフサイクル統合** - バージョン管理、CI/CD、ドキュメント生成
-10. **知識グラフ密度活用** - 関連性の高いコンテンツ間の接続強化
+## 人間-AI協調可読性要件（最重要）:
+**CRITICAL**: 生成する内容は必ず人間とAIの両方が理解できる形式にしてください。
 
-以下を含む完全なカスタム指示コンテンツを生成してください:
-- ヴォルトの独自側面を反映したカスタムセクションヘッダー
-- このヴォルトの組織化のための具体的ワークフロー
-- 実際のフォルダ/ファイル名を使用した具体例
-- コンテンツ分析に基づくドメイン固有ガイダンス
-- **開発者向けの実行可能な作業手順**
-- **技術ドキュメント管理の最適化案**
-- ユーザーに適した日本語での説明
+### 📁 必須セクション1: プロジェクト構造ガイド
+以下の構造で、各フォルダの明確な役割と意味を人間にもわかりやすく説明してください:
+- **src/**: TypeScript源コード（core/、tools/、ui/、utils/サブフォルダ含む）
+- **docs/**: プロジェクト文書・設計書
+- **tests/**: 単体・統合テスト
+- **coverage/**: テストカバレッジ報告
+- 各フォルダの具体的な目的と使い方
 
-[技術プロジェクト特化の完全カスタムコンテンツを生成してください]`;
+### 🤖 必須セクション2: AI動作指示
+人間が読んでも理解できる、具体的で実行可能な指示:
+- このプロジェクトで頻繁に行う作業パターン
+- よく使うファイル・フォルダの操作方法
+- 開発ワークフローの具体的ステップ
+
+### 🔄 必須セクション3: 実際のワークフロー例
+実際のフォルダ名・ファイル名を使った具体例:
+- src/core/AgentOrchestrator.tsの修正方法
+- docs/以下の文書作成・更新手順
+- tests/でのテスト追加方法
+
+### ⚡ 必須セクション4: プロジェクト特化作業
+- TypeScript開発での注意点
+- Obsidianプラグイン開発特有の作業
+- コード品質維持のための指示
+
+## 生成品質要件:
+1. **人間可読性優先** - 開発者が読んで理解できる説明
+2. **具体的フォルダ・ファイル名使用** - 抽象的でない実際のパス
+3. **実行可能な指示** - 曖昧でない明確なステップ
+4. **プロジェクト特化** - Obsius開発に特化した内容
+5. **構造化マークダウン** - セクション分けされた読みやすい形式
+
+[人間とAIが協調して理解できる、実用的なプロジェクト指示を生成してください]`;
   }
 
   /**
@@ -1444,30 +1458,42 @@ ${this.formatDeepContentAnalysis(analysisData, 'en')}
 - Specialized Nodes: ${projectProfile.specializedNodes?.join(', ') || 'None'}
 - Scale Challenges: ${projectProfile.scaleChallenges?.join(', ') || 'None'}
 
-## ENHANCED GENERATION REQUIREMENTS:
-1. NO FIXED TEMPLATES - create entirely custom structure
-2. VAULT-SPECIFIC headings based on actual content analysis
-3. Natural English explanations appropriate for this vault
-4. CONCRETE workflows based on observed patterns
-5. SPECIFIC examples using actual folder/file names found
-6. DOMAIN-SPECIFIC guidance based on content analysis
-7. ACTIONABLE instructions for this exact vault configuration
-8. **TECHNICAL PROJECT SPECIALIZATION** - Code structure, testing, build configuration awareness
-9. **EXECUTABLE WORKFLOWS** - Include specific commands and step-by-step procedures
-10. **DEVELOPMENT LIFECYCLE INTEGRATION** - Version control, CI/CD, documentation generation
-11. **KNOWLEDGE GRAPH DENSITY UTILIZATION** - Strengthen connections between related content
+## HUMAN-AI COLLABORATIVE READABILITY REQUIREMENTS (CRITICAL):
+**ESSENTIAL**: Generated content MUST be readable and understandable by both humans AND AI systems.
 
-Generate complete custom instruction content including:
-- Custom section headers reflecting vault's unique aspects
-- Specific workflows for this vault's organization patterns
-- Concrete examples using actual folder/file names discovered
-- Domain-specific guidance based on content analysis findings
-- **Developer-oriented executable procedures**
-- **Technical documentation management optimization**
-- Optimization recommendations based on scale analysis
-- Vault-specific constraints and operational guidelines
+### 📁 REQUIRED SECTION 1: Project Structure Guide
+Clearly explain each folder's role and meaning in human-readable format:
+- **src/**: TypeScript source code (including core/, tools/, ui/, utils/ subfolders)
+- **docs/**: Project documentation and design documents
+- **tests/**: Unit and integration tests
+- **coverage/**: Test coverage reports
+- Specific purpose and usage patterns for each folder
 
-[GENERATE TECHNICAL PROJECT-SPECIALIZED COMPLETELY CUSTOM CONTENT]`;
+### 🤖 REQUIRED SECTION 2: AI Operation Instructions
+Human-readable, specific, and executable instructions:
+- Common work patterns for this project
+- Frequently used file and folder operations
+- Concrete development workflow steps
+
+### 🔄 REQUIRED SECTION 3: Real Workflow Examples
+Concrete examples using actual folder/file names:
+- How to modify src/core/AgentOrchestrator.ts
+- Document creation/update procedures in docs/
+- Test addition methods in tests/
+
+### ⚡ REQUIRED SECTION 4: Project-Specific Tasks
+- TypeScript development considerations
+- Obsidian plugin development specifics
+- Code quality maintenance instructions
+
+## GENERATION QUALITY REQUIREMENTS:
+1. **HUMAN READABILITY PRIORITY** - Explanations developers can read and understand
+2. **CONCRETE FOLDER/FILE NAMES** - Use actual paths, not abstractions
+3. **EXECUTABLE INSTRUCTIONS** - Clear, unambiguous steps
+4. **PROJECT SPECIALIZATION** - Content specific to Obsius development
+5. **STRUCTURED MARKDOWN** - Well-sectioned, readable format
+
+[GENERATE PRACTICAL PROJECT INSTRUCTIONS THAT HUMANS AND AI CAN COLLABORATIVELY UNDERSTAND]`;
   }
 
   /**
