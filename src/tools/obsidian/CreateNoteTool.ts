@@ -150,10 +150,17 @@ export class CreateNoteTool extends BaseTool<CreateNoteParams> {
   private async generateNoteContent(params: CreateNoteParams): Promise<string> {
     const parts: string[] = [];
 
-    // 1. Generate frontmatter if needed
-    const frontmatter = this.generateFrontmatter(params);
-    if (frontmatter) {
-      parts.push(frontmatter);
+    // Check if content already contains frontmatter to avoid duplication
+    const contentHasFrontmatter = params.content && 
+      params.content.trim().startsWith('---') && 
+      params.content.includes('\n---\n');
+
+    // 1. Generate frontmatter only if content doesn't already have it
+    if (!contentHasFrontmatter) {
+      const frontmatter = this.generateFrontmatter(params);
+      if (frontmatter) {
+        parts.push(frontmatter);
+      }
     }
 
     // 2. Add main content

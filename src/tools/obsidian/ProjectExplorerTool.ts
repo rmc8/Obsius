@@ -87,6 +87,17 @@ interface FolderNode {
 }
 
 /**
+ * Pattern for key file sampling
+ */
+interface KeyFilePattern {
+  pattern: RegExp;
+  priority: number;
+  description: string;
+  limit?: number;
+  folderReq?: string;
+}
+
+/**
  * ProjectExplorerTool - Comprehensive project discovery and analysis
  * 
  * Features:
@@ -254,7 +265,7 @@ export class ProjectExplorerTool extends BaseTool<ProjectExplorerParams> {
   }
 
   /**
-   * Build folder structure using BFS traversal
+   * Build folder structure using enhanced BFS traversal (gemini-cli inspired)
    */
   private async buildFolderStructure(
     startFolder: TFolder,
@@ -270,26 +281,47 @@ export class ProjectExplorerTool extends BaseTool<ProjectExplorerParams> {
       totalChildren: 0
     };
 
-    const queue: Array<{ node: FolderNode; folder: TFolder; depth: number }> = [
-      { node: rootNode, folder: startFolder, depth: 0 }
+    // Enhanced BFS queue with priority
+    const queue: Array<{ node: FolderNode; folder: TFolder; depth: number; priority: number }> = [
+      { node: rootNode, folder: startFolder, depth: 0, priority: 0 }
     ];
     
     let currentItemCount = 0;
     let scannedDirCount = 0;
-    const maxDirs = params.maxDirs || Infinity;
-    const processedPaths = new Set<string>();
+    const maxDirs = params.maxDirs || 500; // Default limit like gemini-cli
+    const visited = new Set<string>(); // Use Set for O(1) lookup like gemini-cli
+    
+    // Debug logging (gemini-cli style)
+    const debugMode = process.env.OBSIUS_DEBUG === 'true';
+    if (debugMode) {
+      console.log(`[ProjectExplorer] Starting BFS traversal from: ${startFolder.path}`);
+      console.log(`[ProjectExplorer] Limits - maxDirs: ${maxDirs}, maxItems: ${params.maxItems}, maxDepth: ${params.maxDepth}`);
+      console.log(`[ProjectExplorer] Configuration - includeContent: ${params.includeFileContent}, includeKeyFiles: ${params.includeKeyFiles}`);
+      console.log(`[ProjectExplorer] FileTypes filter: ${params.fileTypes ? params.fileTypes.join(', ') : 'all'}`);
+    }
 
     while (queue.length > 0 && scannedDirCount < maxDirs) {
-      const { node, folder, depth } = queue.shift()!;
+      // Sort queue by priority (lower number = higher priority)
+      queue.sort((a, b) => a.priority - b.priority);
+      const { node, folder, depth, priority } = queue.shift()!;
       
-      if (processedPaths.has(folder.path) || depth >= (params.maxDepth || 5)) {
+      // Use absolute path for visited check (gemini-cli style)
+      const absolutePath = folder.path;
+      if (visited.has(absolutePath) || depth >= (params.maxDepth || 5)) {
         continue;
       }
       
-      processedPaths.add(folder.path);
+      visited.add(absolutePath);
       scannedDirCount++;
       
+      if (debugMode) {
+        console.log(`[ProjectExplorer] Scanning [${scannedDirCount}/${maxDirs}]: ${absolutePath}`);
+      }
+      
       if (currentItemCount >= (params.maxItems || 1000)) {
+        if (debugMode) {
+          console.log(`[ProjectExplorer] Reached max items limit: ${params.maxItems}`);
+        }
         continue;
       }
 
@@ -358,7 +390,24 @@ export class ProjectExplorerTool extends BaseTool<ProjectExplorerParams> {
 
             // Queue for processing if not at max depth
             if (depth + 1 < (params.maxDepth || 5)) {
-              queue.push({ node: subNode, folder: child, depth: depth + 1 });
+              // Calculate priority based on folder characteristics (gemini-cli style)
+              let folderPriority = depth + 1; // Base priority on depth
+              
+              // Higher priority (lower number) for important Obsidian folders
+              if (['Index', 'Permanent', 'Apps'].some(important => child.path.includes(important))) {
+                folderPriority -= 10; // High priority
+              } else if (['Journal', 'Pinned'].some(medium => child.path.includes(medium))) {
+                folderPriority -= 5; // Medium priority
+              } else if (['Temp', '.obsidian', 'node_modules'].some(low => child.path.includes(low))) {
+                folderPriority += 20; // Low priority
+              }
+              
+              queue.push({ 
+                node: subNode, 
+                folder: child, 
+                depth: depth + 1, 
+                priority: folderPriority 
+              });
             }
           }
         }
@@ -416,55 +465,135 @@ export class ProjectExplorerTool extends BaseTool<ProjectExplorerParams> {
   /**
    * Identify and sample key project files for enhanced analysis
    */
-  private async sampleKeyProjectFiles(rootNode: FolderNode): Promise<string> {
+  private async sampleKeyProjectFiles(rootNode: FolderNode, debugMode: boolean = false): Promise<string> {
     const keyFileSamples: string[] = [];
     
-    // Key files to prioritize for sampling (based on gemini-cli patterns)
-    const keyFilePatterns = [
-      { pattern: /^README\.(md|txt)$/i, priority: 1, description: 'Project Documentation' },
-      { pattern: /^package\.json$/i, priority: 2, description: 'Node.js Dependencies' },
-      { pattern: /^tsconfig\.json$/i, priority: 3, description: 'TypeScript Configuration' },
-      { pattern: /^\.gitignore$/i, priority: 4, description: 'Git Exclusions' },
-      { pattern: /^(webpack|vite|rollup)\.config\.(js|ts|mjs)$/i, priority: 5, description: 'Build Configuration' },
-      { pattern: /^manifest\.json$/i, priority: 6, description: 'Application Manifest' },
-      { pattern: /^CLAUDE\.md$/i, priority: 7, description: 'AI Context Instructions' },
-      { pattern: /^GEMINI\.md$/i, priority: 8, description: 'AI Context Instructions' }
+    // Key files to prioritize for sampling (enhanced for Obsidian Vaults)
+    const keyFilePatterns: KeyFilePattern[] = [
+      // AI Context Instructions (highest priority)
+      { pattern: /^CLAUDE\.md$/i, priority: 1, description: 'Claude AI Instructions' },
+      { pattern: /^GEMINI\.md$/i, priority: 2, description: 'Gemini AI Instructions' },
+      { pattern: /^OBSIUS\.md$/i, priority: 3, description: 'Obsius AI Instructions' },
+      
+      // Vault Structure and Documentation
+      { pattern: /^README\.(md|txt)$/i, priority: 4, description: 'Vault Documentation' },
+      { pattern: /^Index\.(md|txt)$/i, priority: 5, description: 'Vault Index' },
+      { pattern: /^Home\.(md|txt)$/i, priority: 6, description: 'Vault Home Page' },
+      
+      // Index folder patterns (navigation structure)
+      { pattern: /^(Personal|Professional|Technical|Academic)\.md$/i, priority: 7, description: 'Main Index', folderReq: 'Index' },
+      { pattern: /^(Me|Career|Education|Hobby|Health)\.md$/i, priority: 8, description: 'Personal Index', folderReq: 'Index' },
+      
+      // Permanent knowledge base patterns
+      { pattern: /^(Lang|Framework|Tool|Concept)\/.*\.md$/i, priority: 9, description: 'Technical Knowledge', folderReq: 'Permanent' },
+      { pattern: /^(Audio|Game|Health|Fragrance)\.md$/i, priority: 10, description: 'Interest Category', folderReq: 'Permanent' },
+      
+      // Personal profile and core information
+      { pattern: /^KoheiMiyashita\.md$/i, priority: 11, description: 'Personal Profile' },
+      { pattern: /^(PersonalAudioHistory|PersonalFragranceCollection)\.md$/i, priority: 12, description: 'Personal Collection' },
+      
+      // Recent Journal entries for current context
+      { pattern: /^2025-.*\.md$/i, priority: 13, description: 'Recent Journal', limit: 3, folderReq: 'Journal' },
+      { pattern: /^202[0-9]-.*\.md$/i, priority: 14, description: 'Journal Entry', limit: 2, folderReq: 'Journal' },
+      
+      // Templates and app configurations
+      { pattern: /^(Jornal|MinimalNote)\.md$/i, priority: 15, description: 'Note Template', folderReq: 'Temp/Templates' },
+      { pattern: /^(ywt|todays_highlights)\.md$/i, priority: 16, description: 'AI Framework', folderReq: 'Apps/copilot-custom-prompts' },
+      
+      // Representative diverse content sampling
+      { pattern: /^[^\/]*\.md$/i, priority: 20, description: 'Root Level Note', limit: 2 },
+      { pattern: /^.*\.md$/i, priority: 25, description: 'General Sample', limit: 8 },
+      
+      // Configuration and project files (lower priority)
+      { pattern: /^(package|manifest)\.json$/i, priority: 30, description: 'Configuration File' },
+      { pattern: /^(tsconfig|\.eslintrc)\..*$/i, priority: 31, description: 'Build Configuration' },
+      { pattern: /^\.gitignore$/i, priority: 32, description: 'Git Exclusions' }
     ];
 
-    const foundKeyFiles: Array<{ file: FileInfo; priority: number; description: string }> = [];
+    const foundKeyFiles: Array<{ file: FileInfo; priority: number; description: string; folderPath: string }> = [];
+    const sampleCounts = new Map<string, number>(); // Track samples per pattern
 
-    // Recursively find key files
-    const searchForKeyFiles = (node: FolderNode) => {
+    // Recursively find key files with diverse sampling and folder filtering
+    const searchForKeyFiles = (node: FolderNode, currentPath = '') => {
       for (const file of node.files) {
-        for (const { pattern, priority, description } of keyFilePatterns) {
-          if (pattern.test(file.name)) {
-            foundKeyFiles.push({ file, priority, description });
+        for (const { pattern, priority, description, limit, folderReq } of keyFilePatterns) {
+          // Check folder requirement if specified
+          if (folderReq && !currentPath.includes(folderReq)) {
+            continue;
+          }
+          
+          if (pattern.test(file.name) || pattern.test(file.relativePath)) {
+            // Check if we've reached the limit for this pattern
+            const patternKey = `${priority}-${description}`;
+            const currentCount = sampleCounts.get(patternKey) || 0;
+            
+            if (!limit || currentCount < limit) {
+              foundKeyFiles.push({ 
+                file, 
+                priority, 
+                description: limit ? `${description} (${currentCount + 1})` : description,
+                folderPath: currentPath
+              });
+              sampleCounts.set(patternKey, currentCount + 1);
+              
+              // Debug logging for file discovery
+              if (debugMode) {
+                console.log(`[ProjectExplorer] Found key file: ${file.name} in ${currentPath} (${description})`);
+              }
+            }
           }
         }
       }
       
       for (const subNode of node.subFolders) {
         if (!subNode.isIgnored) {
-          searchForKeyFiles(subNode);
+          const subPath = currentPath ? `${currentPath}/${subNode.name}` : subNode.name;
+          searchForKeyFiles(subNode, subPath);
         }
       }
     };
 
     searchForKeyFiles(rootNode);
 
-    // Sort by priority and sample content
-    foundKeyFiles.sort((a, b) => a.priority - b.priority);
+    // Sort by priority and diversify by folder
+    foundKeyFiles.sort((a, b) => {
+      if (a.priority !== b.priority) return a.priority - b.priority;
+      // Secondary sort by folder diversity
+      return a.folderPath.localeCompare(b.folderPath);
+    });
 
-    for (const { file, description } of foundKeyFiles.slice(0, 5)) { // Limit to top 5 key files
+    // Limit to top 12 key files for comprehensive analysis coverage
+    for (const { file, description, folderPath } of foundKeyFiles.slice(0, 12)) {
       try {
         const tFile = this.app.vault.getAbstractFileByPath(file.relativePath);
         if (tFile instanceof TFile) {
           const content = await this.app.vault.read(tFile);
           
-          // Sample first 500 characters for analysis
-          const sample = content.length > 500 ? content.substring(0, 500) + '...' : content;
+          // Enhanced sampling with frontmatter extraction and content analysis
+          let sample = '';
+          const lines = content.split('\n');
           
-          keyFileSamples.push(`### ${description}: ${file.name}\n\`\`\`\n${sample}\n\`\`\``);
+          // Extract frontmatter if present
+          if (lines[0] === '---') {
+            const frontmatterEnd = lines.slice(1).findIndex(line => line === '---');
+            if (frontmatterEnd !== -1) {
+              const frontmatter = lines.slice(1, frontmatterEnd + 1).join('\n');
+              const mainContent = lines.slice(frontmatterEnd + 2).join('\n');
+              sample = `FRONTMATTER:\n${frontmatter}\n\nCONTENT:\n${mainContent.substring(0, 300)}`;
+            } else {
+              sample = content.substring(0, 500);
+            }
+          } else {
+            sample = content.substring(0, 500);
+          }
+          
+          // Add truncation indicator if needed
+          if (sample.length < content.length) {
+            sample += '...';
+          }
+          
+          const folderInfo = folderPath ? ` (${folderPath}/)` : '';
+          keyFileSamples.push(`### ${description}: ${file.name}${folderInfo}\n\`\`\`\n${sample}\n\`\`\``);
         }
       } catch (error) {
         console.warn(`Could not read key file ${file.relativePath}:`, error);
@@ -572,8 +701,9 @@ export class ProjectExplorerTool extends BaseTool<ProjectExplorerParams> {
       // Generate analysis summary
       const analysisSummary = this.generateAnalysisSummary(rootNode, params, scannedDirCount);
       
-      // Generate key file samples if requested
-      const keyFileSamples = params.includeKeyFiles ? await this.sampleKeyProjectFiles(rootNode) : '';
+      // Generate key file samples if requested  
+      const debugMode = process.env.OBSIUS_DEBUG === 'true';
+      const keyFileSamples = params.includeKeyFiles ? await this.sampleKeyProjectFiles(rootNode, debugMode) : '';
       
       // Build final output
       const output: string[] = [];

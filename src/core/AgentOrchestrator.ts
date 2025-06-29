@@ -380,7 +380,13 @@ export class AgentOrchestrator {
     
     // Check if this is an analysis-only task first
     if (this.isAnalysisOnlyTask(userInput)) {
-      return true; // Analysis-only tasks are simple
+      // Complex analysis prompts (like vault analysis) need full workflow for proper AI processing
+      if (userInput.includes('COMPREHENSIVE VAULT ANALYSIS') || 
+          userInput.includes('ANALYSIS FRAMEWORK') ||
+          userInput.length > 1000) {
+        return false; // Complex analysis needs full workflow
+      }
+      return true; // Simple analysis tasks are simple
     }
     
     // Complex task indicators that require full workflow
@@ -652,6 +658,16 @@ export class AgentOrchestrator {
     const successfulActions = workflowState.executedActions.filter(a => a.result?.success);
     
     if (successfulActions.length === 0) {
+      // Check if this is an analysis task that should return the AI's actual analysis content
+      if (workflowState.currentObjective?.includes('ANALYSIS') || 
+          workflowState.originalRequest?.includes('[ANALYSIS ONLY') ||
+          workflowState.originalRequest?.includes('COMPREHENSIVE VAULT ANALYSIS')) {
+        // For analysis tasks, look for AI response content in conversation history
+        const lastMessage = this.conversationHistory[this.conversationHistory.length - 1];
+        if (lastMessage?.content && lastMessage.content !== 'I completed analyzing your request.') {
+          return lastMessage.content;
+        }
+      }
       return 'I completed analyzing your request.';
     }
     

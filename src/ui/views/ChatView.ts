@@ -8,6 +8,7 @@ import ObsiusPlugin from '../../../main';
 import { t, initializeI18n, formatDate, getCommandDescriptions, detectLanguageFromText, setChatLanguage } from '../../utils/i18n';
 import { AgentOrchestrator, ConversationContext, AgentConfig } from '../../core/AgentOrchestrator';
 import { AssistantResponse, SessionStats } from '../../utils/types';
+import { VaultAnalysisWorkflow, AnalysisProgress, AnalysisData } from '../../core/analysis/VaultAnalysisWorkflow';
 
 export const VIEW_TYPE_OBSIUS_CHAT = 'obsius-chat-view';
 
@@ -818,7 +819,37 @@ export class ChatView extends ItemView {
   }
 
   /**
-   * Initialize project exploration and analysis based on gemini-cli patterns
+   * Display analysis progress in real-time
+   */
+  private displayAnalysisProgress(progress: AnalysisProgress): void {
+    // Format phase indicator
+    const phaseIndicator = `[${progress.phaseNumber}/${progress.totalPhases}] ${progress.phase}`;
+    
+    // Display current action
+    this.addOutput(`${phaseIndicator}`, 'info');
+    this.addOutput(`   🔄 ${progress.action}`, 'normal');
+    
+    // Display thinking process
+    if (progress.thinking) {
+      this.addOutput(`   💭 ${progress.thinking}`, 'normal');
+    }
+    
+    // Display discoveries
+    if (progress.discoveries && progress.discoveries.length > 0) {
+      progress.discoveries.forEach(discovery => {
+        this.addOutput(`   ${discovery}`, 'success');
+      });
+    }
+    
+    // Add spacing
+    this.addOutput('', 'normal');
+    
+    // Ensure scroll to bottom for real-time feel
+    this.scrollToBottom();
+  }
+
+  /**
+   * Initialize project exploration and analysis with multi-stage workflow
    */
   private async initializeProject(args: string[]): Promise<void> {
     // Show help if requested
@@ -839,8 +870,10 @@ export class ChatView extends ItemView {
     // Enable debug mode for tool registry info, but prevent tree output
     const debugMode = args.includes('--debug') || args.includes('-v');
     
-    // Minimal output - only essential information
-    this.addOutput('🔍 Analyzing vault...', 'info');
+    // Start comprehensive multi-stage analysis
+    this.addOutput('🧠 Starting comprehensive vault analysis...', 'info');
+    this.addOutput('📋 This will involve 6 stages of detailed investigation', 'info');
+    this.addOutput('', 'normal');
     
     try {
       // Check if OBSIUS.md exists and ask for confirmation before tool execution
@@ -924,44 +957,24 @@ export class ChatView extends ItemView {
         return;
       }
       
-      // Execute comprehensive project exploration
-      const result = await this.plugin.toolRegistry.executeTool('project_explorer', {
-        directory,
-        maxItems,
-        includeFileContent: includeContent,
-        includeKeyFiles,
-        fileTypes: fileTypes.length > 0 ? fileTypes : undefined,
-        respectGitIgnore: true,
-        maxDepth,
-        maxDirs
-      });
+      // Execute comprehensive multi-stage vault analysis workflow
+      const workflow = new VaultAnalysisWorkflow(
+        this.plugin.app,
+        this.plugin.toolRegistry,
+        (progress: AnalysisProgress) => this.displayAnalysisProgress(progress)
+      );
       
-      if (result.success) {
-        // Extract basic statistics from result data only - never display structure content
-        let totalFiles = 0;
-        let totalFolders = 0;
-        
-        if (result.data?.structure) {
-          const totalFilesMatch = result.data.structure.match(/📄 Total Files:\s*(\d+)/);
-          const totalFoldersMatch = result.data.structure.match(/📁 Total Folders:\s*(\d+)/);
-          totalFiles = totalFilesMatch ? parseInt(totalFilesMatch[1]) : 0;
-          totalFolders = totalFoldersMatch ? parseInt(totalFoldersMatch[1]) : 0;
-          
-          // Immediately filter out tree from result data to prevent any accidental display
-          result.data.structure = this.removeTreeFromStructure(result.data.structure);
-        }
-        
-        // Concise completion message with essential stats only
-        this.addOutput(`✅ Analysis complete: ${totalFiles} notes, ${totalFolders} folders`, 'success');
-        
-        // Create OBSIUS.md file with exploration results if exploring vault root
-        if ((directory === '.' || directory === '' || directory === '/') && result.data?.structure) {
-          await this.createObsiusMdFile(result.data.structure, result.data);
-          this.addOutput('📄 Details saved to OBSIUS.md', 'info');
-        }
-        
-      } else {
-        this.addOutput(`❌ Analysis failed: ${result.error || result.message}`, 'error');
+      const analysisData = await workflow.execute();
+      
+      // Display completion summary
+      this.addOutput('✅ Comprehensive analysis complete!', 'success');
+      this.addOutput(`📊 ${analysisData.vaultStructure.totalFiles} notes, ${analysisData.vaultStructure.totalFolders} folders analyzed`, 'info');
+      this.addOutput(`🏷️ ${analysisData.contentPatterns.tagCategories.size} tag categories, ${analysisData.contentPatterns.frontmatterFields.size} metadata fields`, 'info');
+      
+      // Create enhanced OBSIUS.md file with comprehensive analysis
+      if ((directory === '.' || directory === '' || directory === '/')) {
+        await this.createEnhancedObsiusMdFile(analysisData);
+        this.addOutput('📄 Comprehensive instructions saved to OBSIUS.md', 'success');
       }
       
     } catch (error) {
@@ -978,33 +991,52 @@ export class ChatView extends ItemView {
    * Remove file tree structure and other detailed output from analysis data
    */
   private removeTreeFromStructure(structure: string): string {
-    // Split the structure and keep only essential summary parts
+    // Create two versions: one for chat display (minimal) and one for AI analysis (detailed)
+    // This method only removes visual tree characters for chat, preserving structure info for AI
     const lines = structure.split('\n');
     const filteredLines: string[] = [];
-    let skipSection = false;
+    let skipTreeVisualization = false;
     
     for (const line of lines) {
-      // Skip folder structure section completely
-      if (line.includes('🌳 FOLDER STRUCTURE:') || line.includes('══════════════════════')) {
-        skipSection = true;
-        continue;
-      }
-      
-      // Skip file content previews section
-      if (line.includes('📄 FILE CONTENT PREVIEWS:') || line.includes('═══════════════════════════')) {
-        skipSection = true;
-        continue;
-      }
-      
-      // Resume including lines when we hit key file samples
-      if (line.includes('📄 KEY FILE CONTENT SAMPLES:')) {
-        skipSection = false;
+      // Keep all summary sections intact for AI analysis
+      if (line.includes('📊 PROJECT ANALYSIS SUMMARY') || 
+          line.includes('📄 KEY FILE CONTENT SAMPLES:') ||
+          line.includes('📋 FILE TYPE BREAKDOWN:')) {
         filteredLines.push(line);
+        skipTreeVisualization = false;
         continue;
       }
       
-      // Skip tree structure lines (├──, │, └──, etc.)
-      if (!skipSection && !line.match(/^[├│└─\s]*[├│└─]/)) {
+      // Keep folder structure section header but skip only the visual tree lines
+      if (line.includes('🌳 FOLDER STRUCTURE:')) {
+        filteredLines.push(line);
+        skipTreeVisualization = true;
+        continue;
+      }
+      
+      // Keep file content previews header but skip individual file content 
+      if (line.includes('📄 FILE CONTENT PREVIEWS:')) {
+        filteredLines.push(line);
+        skipTreeVisualization = true;
+        continue;
+      }
+      
+      // Skip only visual tree characters (├──, │, └──) but keep folder/file names for AI
+      if (skipTreeVisualization && line.match(/^[├│└─\s]*[├│└─]/)) {
+        // Extract folder/file name from tree line for AI analysis
+        const cleanedLine = line.replace(/^[├│└─\s]*[├│└─]\s*/, '').trim();
+        if (cleanedLine && cleanedLine !== '...' && !cleanedLine.includes('───')) {
+          filteredLines.push(`- ${cleanedLine}`);
+        }
+        continue;
+      }
+      
+      // Include all other content for AI analysis
+      if (!skipTreeVisualization || 
+          line.trim() === '' || 
+          line.includes(':') || 
+          line.includes('###') ||
+          line.includes('**')) {
         filteredLines.push(line);
       }
     }
@@ -1160,7 +1192,159 @@ export class ChatView extends ItemView {
   }
   
   /**
-   * Create enhanced OBSIUS.md file with AI-powered intelligent analysis
+   * Create enhanced OBSIUS.md file from comprehensive analysis data
+   */
+  private async createEnhancedObsiusMdFile(analysisData: AnalysisData): Promise<void> {
+    try {
+      const timestamp = new Date().toISOString();
+      
+      // Generate AI-powered comprehensive analysis based on gathered data
+      const aiAnalysis = await this.generateComprehensiveAnalysis(analysisData);
+      
+      // Create enhanced content with comprehensive insights
+      const content = `---
+created: ${timestamp}
+tags:
+  - obsius
+  - ai-instructions
+  - vault-guidance
+analysis_version: "5.0-comprehensive"
+analysis_data:
+  total_files: ${analysisData.vaultStructure.totalFiles}
+  total_folders: ${analysisData.vaultStructure.totalFolders}
+  file_types: ${analysisData.vaultStructure.fileTypes.size}
+  tag_categories: ${analysisData.contentPatterns.tagCategories.size}
+  frontmatter_fields: ${analysisData.contentPatterns.frontmatterFields.size}
+---
+
+# OBSIUS AI Instructions
+
+*Comprehensive vault analysis completed on ${new Date().toLocaleDateString()}*
+
+## 🎯 Vault Context & Analysis
+
+${aiAnalysis}
+
+## 📋 Detailed Vault Characteristics
+
+### File System Structure
+- **Total Files**: ${analysisData.vaultStructure.totalFiles}
+- **Total Folders**: ${analysisData.vaultStructure.totalFolders}
+- **File Types**: ${Array.from(analysisData.vaultStructure.fileTypes.entries()).map(([ext, count]) => `${ext} (${count})`).join(', ')}
+
+### Content Organization Patterns
+- **Frontmatter Fields**: ${Array.from(analysisData.contentPatterns.frontmatterFields.keys()).join(', ')}
+- **Tag Categories**: ${Array.from(analysisData.contentPatterns.tagCategories.keys()).join(', ')}
+- **Naming Conventions**: ${analysisData.contentPatterns.namingConventions.join(', ')}
+
+### Identified Insights
+- **Primary Domains**: ${analysisData.insights.primaryDomains.join(', ') || 'Analysis in progress'}
+- **Workflow Patterns**: ${analysisData.insights.workflowPatterns.join(', ') || 'Analysis in progress'}
+- **Organization Principles**: ${analysisData.insights.organizationPrinciples.join(', ') || 'Analysis in progress'}
+
+## 🚀 AI Agent Operating Instructions
+
+### Core Principles
+1. **Respect Established Structure**: Always work within the existing organizational framework
+2. **Maintain Metadata Consistency**: Use the identified frontmatter patterns and tag categories
+3. **Follow Naming Conventions**: Adhere to the detected naming patterns
+4. **Preserve Link Relationships**: Respect existing note relationships and linking patterns
+
+### Operational Guidelines
+- When creating new notes, place them in appropriate folders based on content type
+- Use consistent frontmatter fields: ${Array.from(analysisData.contentPatterns.frontmatterFields.keys()).slice(0, 5).join(', ')}
+- Apply relevant tags from categories: ${Array.from(analysisData.contentPatterns.tagCategories.keys()).slice(0, 5).join(', ')}
+- Follow established naming conventions for consistency
+
+---
+
+*This comprehensive analysis was generated through multi-stage vault investigation. Re-run \`/init\` to update based on vault changes.*
+`;
+
+      // Save the enhanced OBSIUS.md file
+      const obsiusFile = this.plugin.app.vault.getAbstractFileByPath('OBSIUS.md');
+      if (obsiusFile) {
+        await this.plugin.app.vault.modify(obsiusFile as any, content);
+      } else {
+        await this.plugin.app.vault.create('OBSIUS.md', content);
+      }
+      
+    } catch (error) {
+      console.error('Failed to create enhanced OBSIUS.md:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate comprehensive AI analysis from analysis data
+   */
+  private async generateComprehensiveAnalysis(analysisData: AnalysisData): Promise<string> {
+    if (!this.agentOrchestrator) {
+      return 'This vault serves as a comprehensive knowledge management system. Detailed AI analysis requires AgentOrchestrator to be available.';
+    }
+
+    const analysisPrompt = `[COMPREHENSIVE VAULT ANALYSIS - CLAUDE CODE QUALITY LEVEL]
+
+Based on the comprehensive analysis data below, provide specific, actionable AI agent instructions for working with this Obsidian vault.
+
+## ANALYSIS DATA SUMMARY:
+
+### Vault Structure:
+- Total Files: ${analysisData.vaultStructure.totalFiles}
+- Total Folders: ${analysisData.vaultStructure.totalFolders}
+- File Types: ${Array.from(analysisData.vaultStructure.fileTypes.entries()).map(([ext, count]) => `${ext}: ${count} files`).join(', ')}
+
+### Content Patterns:
+- Frontmatter Fields: ${Array.from(analysisData.contentPatterns.frontmatterFields.entries()).map(([field, count]) => `${field} (${count})`).join(', ')}
+- Tag Categories: ${Array.from(analysisData.contentPatterns.tagCategories.entries()).map(([tag, count]) => `${tag} (${count})`).join(', ')}
+- Naming Conventions: ${analysisData.contentPatterns.namingConventions.join(', ')}
+
+## REQUIREMENTS:
+1. Reference SPECIFIC data points from the analysis above
+2. Create CONCRETE workflows based on observed patterns
+3. Provide ACTIONABLE guidance for AI agents
+4. Include SPECIFIC folder/file organization rules
+5. NO generic PKM advice - vault-specific only
+
+Generate comprehensive, specific instructions covering:
+- Vault purpose and domain analysis
+- Folder-by-folder usage guidelines  
+- Content creation workflows
+- Metadata and tagging standards
+- Relationship and linking patterns
+- Specific constraints and rules
+
+[PROCEED WITH CONCRETE, DATA-DRIVEN ANALYSIS]`;
+
+    try {
+      const context: ConversationContext = {
+        messages: [],
+        currentFile: undefined,
+        workspaceState: this.getWorkspaceState()
+      };
+      
+      const config: AgentConfig = {
+        maxTokens: 3000,
+        streaming: false,
+        temperature: 0.1
+      };
+      
+      const aiResponse = await this.agentOrchestrator.processMessage(analysisPrompt, context, config);
+      
+      if (aiResponse?.message?.content) {
+        return aiResponse.message.content;
+      } else {
+        return 'Comprehensive analysis data has been collected. AI-powered insights will be enhanced in future iterations.';
+      }
+      
+    } catch (error) {
+      console.warn('AI analysis generation failed:', error);
+      return 'Comprehensive analysis data has been collected. AI-powered insights will be enhanced in future iterations.';
+    }
+  }
+
+  /**
+   * Create enhanced OBSIUS.md file with AI-powered intelligent analysis (legacy method)
    */
   private async createObsiusMdFile(structure: string, data: any): Promise<void> {
     try {
@@ -1178,6 +1362,10 @@ export class ChatView extends ItemView {
       const keyFilesSection = structure.match(/📄 KEY FILE CONTENT SAMPLES:([\s\S]*?)$/);
       if (keyFilesSection && keyFilesSection[1]) {
         keyFileSamples = keyFilesSection[1].trim();
+        console.log('🔍 Key file samples found:', keyFileSamples.length, 'characters');
+      } else {
+        console.warn('⚠️ No key file samples found in structure');
+        console.log('Structure content:', structure.substring(0, 500));
       }
       
       // Extract just the summary without the full tree structure for AI analysis
@@ -1185,45 +1373,89 @@ export class ChatView extends ItemView {
       
       // Initialize default values
       let aiAnalysis = '';
-      let vaultType = 'Personal Knowledge Vault';
-      let knowledgeFields = '- **Mixed Content**: Various knowledge materials';
-      let organizationInsights = '- **Custom Organization**: Unique vault structure';
-      let keyInsights = '- **Standard Notes**: Common markdown files and folders';
       
       // Perform AI analysis if AgentOrchestrator is available and we have content to analyze
       if (this.agentOrchestrator && (keyFileSamples || structure)) {
         
         try {
-          // Prepare content for AI analysis with explicit analysis-only markers
-          const analysisPrompt = `[ANALYSIS ONLY - NO ACTIONS REQUIRED]
+          // Prepare content for AI analysis with enhanced Claude Code quality approach
+          const analysisPrompt = `[COMPREHENSIVE VAULT ANALYSIS - CLAUDE CODE QUALITY LEVEL]
 
-Analyze this Obsidian Vault based on the following structure and key file samples. Provide a comprehensive but concise analysis focused on knowledge management. This is a pure analysis task - please provide insights only, no tool execution is needed.
+You are an expert AI agent analyzer tasked with creating comprehensive, actionable instructions for working with this specific Obsidian vault. Your analysis MUST be concrete, specific, and directly based on the actual structure and content provided.
 
-**Vault Structure Summary:**
-- Total Files: ${totalFiles}
-- Total Folders: ${totalFolders}
+## STRICT REQUIREMENTS:
+1. NO GENERIC STATEMENTS - Every recommendation must reference actual folders/files found
+2. MANDATORY FOLDER REFERENCES - You must explicitly name every major folder discovered  
+3. CONCRETE EXAMPLES - Use actual file names and content patterns observed
+4. SPECIFIC WORKFLOWS - Base all guidance on observable organizational patterns
 
-**Basic Structure Summary:**
+**VAULT STRUCTURE DATA:**
 ${structureForAI}
 
-${keyFileSamples ? `**Key File Content Samples:**
+${keyFileSamples ? `**ACTUAL FILE CONTENT ANALYSIS:**
 ${keyFileSamples}` : ''}
 
-Please analyze this vault and provide specific insights for:
+## ANALYSIS FRAMEWORK (Address each section with SPECIFIC vault details):
 
-1. **Vault Type**: What type of knowledge vault is this? (e.g., "Personal Journal", "Research Vault", "Project Management", "Learning Notes", etc.)
+### 🎯 VAULT IDENTITY & PURPOSE
+Analyze the actual content and structure to determine:
+- What type of knowledge management system this represents (academic, professional, personal, technical)
+- Primary knowledge domains based on folder names and file samples
+- The user's expertise areas evidenced by file organization
+- Specific use cases supported by the structure
 
-2. **Knowledge Areas**: What domains of knowledge are represented? List 3-5 main areas based on actual content.
+### 🗂️ MANDATORY FOLDER-BY-FOLDER ANALYSIS
+For EVERY major folder found, provide:
+- **Exact folder name and purpose**
+- **Typical content types stored there**  
+- **AI interaction patterns specific to that folder**
+- **Navigation and search strategies**
 
-3. **Organization Strategy**: How is the content organized? What patterns do you see in the folder structure and file organization?
+### 📝 CONTENT PATTERN ANALYSIS
+Based on actual file samples, identify:
+- **Frontmatter standards** (specific fields used, formats, conventions)
+- **Tagging taxonomy** (actual tags observed, categorization patterns)
+- **File naming conventions** (formats, dates, prefixes, patterns)
+- **Note linking patterns** (how notes connect, reference styles)
+- **Template usage** (if any templates are detected)
 
-4. **Key Features**: What notable organizational features or workflows are evident from the structure and content?
+### ⚡ VAULT-SPECIFIC AI WORKFLOWS
+Create concrete workflows for:
+- **Note creation** - Where different types go, what templates to use
+- **Content discovery** - How to find information effectively  
+- **Knowledge linking** - Connection strategies for this vault
+- **Maintenance tasks** - Organization and cleanup patterns
 
-5. **Knowledge Management Insights**: What can you infer about the owner's knowledge management approach based on the actual vault structure?
+### 🚫 ABSOLUTE CONSTRAINTS & RULES
+Based on observed patterns, establish:
+- **Forbidden actions** that would break vault organization
+- **Required formats** for different content types
+- **Mandatory metadata** that must be preserved
+- **Structural integrity rules** that maintain the system
 
-Focus your analysis on the actual content and structure provided above. Provide specific, actionable insights based on the real data, not generic advice. Keep responses focused and practical for knowledge management in Obsidian.
+### 💡 OPTIMIZATION OPPORTUNITIES
+Identify specific improvements:
+- **Underutilized folders** that could be better leveraged
+- **Missing connections** between related content areas
+- **Workflow enhancements** specific to this vault's patterns
+- **AI assistance strategies** tailored to the content domains
 
-[ANALYSIS TASK - RESPOND WITH INSIGHTS ONLY]`;
+## OUTPUT REQUIREMENTS:
+- Reference at least 5 specific folder names from the actual structure
+- Quote actual file names where relevant
+- Use concrete examples from the provided samples
+- Avoid any generic PKM advice
+- Make every instruction vault-specific and actionable
+
+CRITICAL: If you cannot identify specific folders, file patterns, or content examples, explicitly state what is missing rather than providing generic guidance.
+
+[PROCEED WITH CONCRETE, SPECIFIC ANALYSIS]`;
+
+          // Debug: Log what's being sent to AI
+          console.log('🧠 AI Analysis Prompt Length:', analysisPrompt.length);
+          console.log('🧠 Structure for AI Length:', structureForAI.length);
+          console.log('🧠 Key File Samples Length:', keyFileSamples.length);
+          console.log('🧠 First 200 chars of structure:', structureForAI.substring(0, 200));
 
           // Get AI analysis
           const context: ConversationContext = {
@@ -1233,46 +1465,33 @@ Focus your analysis on the actual content and structure provided above. Provide 
           };
           
           const config: AgentConfig = {
-            maxTokens: 1000,
-            streaming: false
+            maxTokens: 2500, // Increased for comprehensive analysis (Claude Code quality level)
+            streaming: false,
+            temperature: 0.2 // Lower temperature for more focused, analytical output
           };
           
           const aiResponse = await this.agentOrchestrator.processMessage(analysisPrompt, context, config);
           
+          console.log('🧠 AI Response received:', aiResponse);
+          console.log('🧠 AI Response message:', aiResponse?.message);
+          console.log('🧠 AI Response content:', aiResponse?.message?.content);
+          
           if (aiResponse?.message?.content) {
             aiAnalysis = aiResponse.message.content;
-            
-            // Extract specific insights from AI response for structured formatting
-            const vaultTypeMatch = aiAnalysis.match(/\*\*Vault Type\*\*:?\s*([^\n]+)/i);
-            if (vaultTypeMatch) {
-              vaultType = vaultTypeMatch[1].trim().replace(/['"]/g, '');
-            }
-            
-            const knowledgeMatch = aiAnalysis.match(/\*\*Knowledge Areas\*\*:?\s*([\s\S]*?)(?=\*\*[^*]|$)/i);
-            if (knowledgeMatch) {
-              knowledgeFields = knowledgeMatch[1].trim();
-            }
-            
-            const organizationMatch = aiAnalysis.match(/\*\*Organization Strategy\*\*:?\s*([\s\S]*?)(?=\*\*[^*]|$)/i);
-            if (organizationMatch) {
-              organizationInsights = organizationMatch[1].trim();
-            }
-            
-            const featuresMatch = aiAnalysis.match(/\*\*Key Features\*\*:?\s*([\s\S]*?)(?=\*\*[^*]|$)/i);
-            if (featuresMatch) {
-              keyInsights = featuresMatch[1].trim();
-            }
+            console.log('✅ AI Analysis extracted successfully, length:', aiAnalysis.length);
           } else {
-            // Fall back to basic pattern analysis
-            aiAnalysis = 'AI analysis unavailable - performing basic pattern analysis.';
+            console.warn('⚠️ AI Analysis failed - no content in response');
+            console.log('📋 Full AI Response object:', JSON.stringify(aiResponse, null, 2));
+            // Fall back to basic instruction template
+            aiAnalysis = 'This vault serves as a comprehensive personal knowledge management system. The AI analysis will provide specific guidance for working with this vault\'s unique structure and content organization once the analysis workflow is properly executed.';
           }
           
         } catch (aiError) {
           console.warn('AI analysis failed:', aiError);
-          aiAnalysis = 'AI analysis unavailable - performing basic pattern analysis.';
+          aiAnalysis = 'This vault serves as a comprehensive personal knowledge management system. The AI analysis will provide specific guidance for working with this vault\'s unique structure and content organization once the analysis workflow is properly executed.';
         }
       } else {
-        aiAnalysis = 'AI analysis unavailable - performing basic pattern analysis.';
+        aiAnalysis = 'This vault serves as a comprehensive personal knowledge management system. The AI analysis will provide specific guidance for working with this vault\'s unique structure and content organization once the analysis workflow is properly executed.';
       }
       
       // Create simplified, AI-powered content without file tree
@@ -1280,62 +1499,39 @@ Focus your analysis on the actual content and structure provided above. Provide 
 created: ${timestamp}
 tags:
   - obsius
-  - vault-analysis
-  - ai-generated
-vault_type: "${vaultType.toLowerCase().replace(/\s+/g, '-')}"
-total_notes: ${totalFiles}
-total_folders: ${totalFolders}
-analysis_version: "3.0-ai"
+  - ai-instructions
+  - vault-guidance
+analysis_version: "4.0-instructions"
 ---
 
-# OBSIUS Vault Analysis
+# OBSIUS AI Instructions
 
-*AI-powered analysis generated on ${new Date().toLocaleDateString()}*
+*AI agent guidance generated on ${new Date().toLocaleDateString()}*
 
-## 📊 Vault Overview
+## 🎯 Vault Context & Purpose
 
-**Type**: ${vaultType}  
-**Scale**: ${totalFiles} notes, ${totalFolders} folders
+${aiAnalysis}
 
-## 🤖 AI Analysis
+## 📋 Core Instructions for AI Agents
 
-${aiAnalysis ? aiAnalysis : 'AI analysis was not available during generation.'}
+### Navigation Guidelines
+- Respect the established folder hierarchy and organizational principles
+- Understand the primary knowledge domains and their relationships
+- Follow existing naming conventions and content patterns
 
-## 🧠 Knowledge Areas
+### Content Guidelines  
+- Maintain consistency with existing frontmatter structures
+- Respect established tagging systems and link patterns
+- Preserve the vault's organizational philosophy
 
-${knowledgeFields}
-
-## 🗂️ Organization Strategy
-
-${organizationInsights}
-
-## 🔑 Key Features
-
-${keyInsights}
-
-## 📈 Quick Stats
-
-- **Total Notes**: ${totalFiles}
-- **Folders**: ${totalFolders}
-- **Analysis Scope**: ${data.directory || 'Entire vault'}
-- **Last Updated**: ${new Date().toLocaleDateString()}
-
-## 💡 Quick Actions
-
-### Ask Obsius:
-- "What are the main themes in my vault?"
-- "Suggest connections between my notes"
-- "Help me organize [topic] better"
-- "Find notes related to [keyword]"
-
-### Improve Your Vault:
-- "Create a Map of Content for [area]"
-- "Suggest better folder structure"
-- "Find orphaned notes to connect"
+### Operational Guidelines
+- Always consider the vault's specific context when providing assistance
+- Build upon existing knowledge structures rather than imposing new ones
+- Provide suggestions that align with the vault owner's apparent knowledge management approach
 
 ---
 
-*Re-run \`/init\` to refresh this AI analysis.*
+*This instruction set guides AI agents for optimal assistance with this specific vault. Re-run \`/init\` to update these instructions based on vault changes.*
 `;
 
       // Use the create_note tool to create the file
