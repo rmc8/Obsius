@@ -120,12 +120,17 @@ export class DeepContentDiscoveryNode extends AnalysisNode {
    * Discover all Markdown files using Glob tool
    */
   private async discoverAllMarkdownFiles(): Promise<string[]> {
-    const globResult = await this.toolRegistry.executeTool('glob', {
-      pattern: '**/*.md',
-      path: '.',
-      case_sensitive: false,
-      respect_git_ignore: true
-    });
+    // Ensure all parameters are the correct type before passing to GlobTool
+    const globParams = {
+      pattern: String('**/*.md'),  // Explicitly convert to string
+      path: String('.'),           // Explicitly convert to string
+      case_sensitive: Boolean(false),
+      respect_git_ignore: Boolean(true)
+    };
+
+    console.log('🔍 DeepContentDiscovery: Calling GlobTool with params:', globParams);
+
+    const globResult = await this.toolRegistry.executeTool('glob', globParams);
 
     if (!globResult.success || !globResult.data?.files) {
       throw new Error(`Glob discovery failed: ${globResult.error || 'No files found'}`);

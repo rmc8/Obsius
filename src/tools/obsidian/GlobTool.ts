@@ -65,9 +65,30 @@ export class GlobTool extends BaseTool<GlobParams> {
     try {
       // Get vault adapter path for filesystem operations
       const vaultPath = this.getVaultPath();
-      const searchDir = params.path 
-        ? path.resolve(vaultPath, params.path)
-        : vaultPath;
+      
+      // Ensure params.path is a string before using it
+      const pathParam = params.path ? String(params.path).trim() : '.';
+      
+      // Resolve search directory safely
+      let searchDir: string;
+      try {
+        if (pathParam === '.' || pathParam === '') {
+          searchDir = vaultPath;
+        } else {
+          // Ensure both parameters are strings for path.resolve
+          const vaultStr = String(vaultPath);
+          const pathStr = String(pathParam);
+          searchDir = path.resolve(vaultStr, pathStr);
+        }
+      } catch (pathError) {
+        console.error('❌ Path resolution error:', pathError);
+        console.error('❌ Path params:', { vaultPath, pathParam });
+        throw new Error(`Failed to resolve search directory: ${pathError instanceof Error ? pathError.message : 'Unknown error'}`);
+      }
+      
+      console.log('🔍 Vault path:', vaultPath);
+      console.log('🔍 Path param:', pathParam);
+      console.log('🔍 Search directory:', searchDir);
 
       // Validate search directory exists and is within vault
       if (!this.isWithinVault(searchDir)) {
@@ -84,20 +105,77 @@ export class GlobTool extends BaseTool<GlobParams> {
         );
       }
 
-      // Execute glob search with v8 API
+      // Debug logging for parameter validation
+      console.log('🔍 GlobTool executing with params:', {
+        pattern: params.pattern,
+        path: params.path,
+        searchDir: searchDir,
+        patternType: typeof params.pattern
+      });
+
+      // Ensure pattern is a string
+      const safePattern = String(params.pattern).trim();
+      if (!safePattern) {
+        throw new Error('Pattern parameter must be a non-empty string');
+      }
+
+      // Execute glob search with v8 API - using simpler options to avoid type issues
       const globOptions = {
         cwd: searchDir,
         nodir: true,
         nocase: !params.case_sensitive,
-        dot: true,
-        ignore: ['**/node_modules/**', '**/.git/**']
+        dot: true
       };
 
-      // Use glob v8 API to get file paths (glob returns a Promise<string[]> in v8)
-      const filePaths: string[] = await new Promise((resolve, reject) => {
-        glob(params.pattern, globOptions, (err, matches) => {
-          if (err) reject(err);
-          else resolve(matches);
+      // Add ignore patterns separately if needed
+      const ignorePatterns = ['**/node_modules/**', '**/.git/**'];
+
+      console.log('🔍 Calling glob with:', { pattern: safePattern, cwd: searchDir });
+
+      // Use glob with callback for compatibility
+      let filePaths: string[] = [];
+      try {
+        console.log('🔍 Attempting glob search...');
+        
+        // Use callback-based API which is more stable
+        filePaths = await new Promise<string[]>((resolve, reject) => {
+          glob(safePattern, globOptions, (err: Error | null, matches: string[]) => {
+            if (err) {
+              console.error('❌ Glob error:', err);
+              reject(err);
+            } else {
+              console.log(`✅ Glob found ${matches?.length || 0} matches`);
+              resolve(matches || []);
+            }
+          });
+        });
+      } catch (globError) {
+        console.error('❌ Glob execution failed:', globError);
+        console.error('❌ Error details:', {
+          message: globError instanceof Error ? globError.message : 'Unknown',
+          stack: globError instanceof Error ? globError.stack : 'No stack',
+          globOptions,
+          pattern: safePattern
+        });
+        
+        // Try alternative approach - use Obsidian's API
+        console.log('🔄 Falling back to Obsidian API for file discovery...');
+        try {
+          const allFiles = this.app.vault.getFiles();
+          filePaths = allFiles
+            .filter(file => file.extension === 'md')
+            .map(file => path.relative(searchDir, path.join(this.getVaultPath(), file.path)));
+          console.log(`✅ Obsidian API found ${filePaths.length} markdown files`);
+        } catch (fallbackError) {
+          throw new Error(`Both glob and fallback failed: ${globError instanceof Error ? globError.message : 'Unknown error'}`);
+        }
+      }
+
+      // Manually filter ignore patterns since the ignore option might be causing issues
+      filePaths = filePaths.filter(path => {
+        return !ignorePatterns.some(pattern => {
+          const regex = pattern.replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*');
+          return new RegExp(regex).test(path);
         });
       });
       
@@ -106,7 +184,11 @@ export class GlobTool extends BaseTool<GlobParams> {
       for (const filePath of filePaths) {
         try {
           const fs = require('fs');
-          const fullPath = path.resolve(searchDir, filePath);
+          // Ensure filePath is a string
+          const filePathStr = String(filePath);
+          const searchDirStr = String(searchDir);
+          const fullPath = path.resolve(searchDirStr, filePathStr);
+          
           const stats = fs.statSync(fullPath);
           entries.push({
             fullpath: () => fullPath,
@@ -114,7 +196,9 @@ export class GlobTool extends BaseTool<GlobParams> {
           });
         } catch (error) {
           // If we can't get stats, still include the file with current time
-          const fullPath = path.resolve(searchDir, filePath);
+          const filePathStr = String(filePath);
+          const searchDirStr = String(searchDir);
+          const fullPath = path.resolve(searchDirStr, filePathStr);
           entries.push({
             fullpath: () => fullPath,
             mtimeMs: Date.now()
@@ -135,8 +219,9 @@ export class GlobTool extends BaseTool<GlobParams> {
       
       // Convert to relative paths from vault root
       const relativePaths = sortedEntries.map(entry => {
-        const absolutePath = entry.fullpath();
-        return path.relative(vaultPath, absolutePath);
+        const absolutePath = String(entry.fullpath());
+        const vaultPathStr = String(vaultPath);
+        return path.relative(vaultPathStr, absolutePath);
       });
 
       // Filter based on gitignore if requested
@@ -180,7 +265,24 @@ export class GlobTool extends BaseTool<GlobParams> {
    * Get vault filesystem path
    */
   private getVaultPath(): string {
-    return (this.app.vault.adapter as any).path || '';
+    const adapter = this.app.vault.adapter as any;
+    const vaultPath = adapter.path || adapter.basePath || '';
+    
+    // Ensure it's a string
+    const safePath = String(vaultPath).trim();
+    
+    console.log('🔍 Vault adapter info:', {
+      hasPath: 'path' in adapter,
+      hasBasePath: 'basePath' in adapter,
+      vaultPath: safePath,
+      pathType: typeof safePath
+    });
+    
+    if (!safePath) {
+      throw new Error('Unable to determine vault filesystem path');
+    }
+    
+    return safePath;
   }
 
   /**
