@@ -1338,8 +1338,7 @@ ${keyInsights}
       const result = await this.plugin.toolRegistry.executeTool('create_note', {
         title: 'OBSIUS',
         content,
-        folder: '',
-        tags: ['obsius', 'project-analysis', 'auto-generated']
+        folder: ''
       });
 
       // Silent operation - success/failure handled by caller
