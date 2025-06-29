@@ -9,6 +9,8 @@ import { t, initializeI18n, formatDate, getCommandDescriptions, detectLanguageFr
 import { AgentOrchestrator, ConversationContext, AgentConfig } from '../../core/AgentOrchestrator';
 import { AssistantResponse, SessionStats } from '../../utils/types';
 import { VaultAnalysisWorkflow, AnalysisProgress, AnalysisData } from '../../core/analysis/VaultAnalysisWorkflow';
+import { AdaptiveVaultAnalysisWorkflow, AdaptiveWorkflowConfig } from '../../core/analysis/AdaptiveVaultAnalysisWorkflow';
+import { LocalizedAnalysisReporter, SupportedLanguage } from '../../core/analysis/LocalizedAnalysisReporter';
 
 export const VIEW_TYPE_OBSIUS_CHAT = 'obsius-chat-view';
 
@@ -257,12 +259,30 @@ export class ChatView extends ItemView {
     }
     
     const line = this.outputContainer.createDiv(`obsius-output-line ${type}`);
-    line.textContent = text;
+    
+    // Use innerHTML with proper HTML escaping to allow text selection
+    // while preventing XSS attacks
+    const escapedText = this.escapeHtml(text);
+    line.innerHTML = escapedText;
+    
+    // Ensure text is selectable
+    line.style.userSelect = 'text';
+    line.style.webkitUserSelect = 'text';
+    line.style.cursor = 'text';
     
     // Force auto-scroll regardless of settings for better UX
     this.forceAutoScroll();
     
     return line;
+  }
+
+  /**
+   * Escape HTML to prevent XSS while preserving formatting
+   */
+  private escapeHtml(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
   
   /**
@@ -957,24 +977,37 @@ export class ChatView extends ItemView {
         return;
       }
       
-      // Execute comprehensive multi-stage vault analysis workflow
-      const workflow = new VaultAnalysisWorkflow(
+      // Create adaptive workflow configuration based on user settings
+      const workflowConfig = AdaptiveVaultAnalysisWorkflow.createConfigFromSettings(
+        this.plugin.settings.ui.chatLanguage,
+        this.plugin.settings.ui.interfaceLanguage,
+        {
+          enableOptimization: true,
+          forceComplexity: args.includes('--simple') ? 'simple' : 
+                          args.includes('--complex') ? 'complex' : undefined
+        }
+      );
+
+      // Execute adaptive multi-stage vault analysis workflow
+      const adaptiveWorkflow = new AdaptiveVaultAnalysisWorkflow(
         this.plugin.app,
         this.plugin.toolRegistry,
-        (progress: AnalysisProgress) => this.displayAnalysisProgress(progress)
+        (progress: AnalysisProgress) => this.displayAnalysisProgress(progress),
+        workflowConfig
       );
       
-      const analysisData = await workflow.execute();
+      const analysisData = await adaptiveWorkflow.execute();
+      const projectProfile = await adaptiveWorkflow.getProjectProfile();
       
-      // Display completion summary
-      this.addOutput('✅ Comprehensive analysis complete!', 'success');
-      this.addOutput(`📊 ${analysisData.vaultStructure.totalFiles} notes, ${analysisData.vaultStructure.totalFolders} folders analyzed`, 'info');
-      this.addOutput(`🏷️ ${analysisData.contentPatterns.tagCategories.size} tag categories, ${analysisData.contentPatterns.frontmatterFields.size} metadata fields`, 'info');
-      
-      // Create enhanced OBSIUS.md file with comprehensive analysis
+      // Create completely AI-generated OBSIUS.md file
       if ((directory === '.' || directory === '' || directory === '/')) {
-        await this.createEnhancedObsiusMdFile(analysisData);
-        this.addOutput('📄 Comprehensive instructions saved to OBSIUS.md', 'success');
+        await this.createFullyGeneratedObsiusMdFile(analysisData, projectProfile, workflowConfig.language);
+        
+        const lang = workflowConfig.language;
+        const message = lang === 'ja' ? 
+          '📄 AIによる完全カスタム指示がOBSIUS.mdに保存されました' :
+          '📄 Fully AI-generated custom instructions saved to OBSIUS.md';
+        this.addOutput(message, 'success');
       }
       
     } catch (error) {
@@ -1192,7 +1225,391 @@ export class ChatView extends ItemView {
   }
   
   /**
-   * Create enhanced OBSIUS.md file from comprehensive analysis data
+   * Create fully AI-generated OBSIUS.md file with minimal fixed template
+   */
+  private async createFullyGeneratedObsiusMdFile(
+    analysisData: AnalysisData, 
+    projectProfile: any, 
+    language: SupportedLanguage
+  ): Promise<void> {
+    try {
+      const timestamp = new Date().toISOString();
+      
+      // Generate completely custom AI instructions
+      const aiGeneratedContent = await this.generateCompletelyCustomInstructions(
+        analysisData, 
+        projectProfile, 
+        language
+      );
+      
+      // Minimal fixed template - only essential metadata and structure
+      const content = `---
+created: ${timestamp}
+tags:
+  - obsius
+  - ai-instructions
+  - vault-guidance
+analysis_version: "6.0-adaptive"
+analysis_data:
+  complexity: ${projectProfile.complexity}
+  organization_level: ${projectProfile.organizationLevel}
+  phases_executed: ${projectProfile.recommendedPhases}
+  analysis_time: ${projectProfile.estimatedAnalysisTime}
+  primary_domains: ${projectProfile.domains.length}
+---
+
+# OBSIUS AI Instructions
+
+${aiGeneratedContent}
+
+---
+
+*Re-run \`/init\` to update based on vault changes.*
+`;
+
+      // Save the fully AI-generated OBSIUS.md file
+      const obsiusFile = this.plugin.app.vault.getAbstractFileByPath('OBSIUS.md');
+      if (obsiusFile) {
+        await this.plugin.app.vault.modify(obsiusFile as any, content);
+      } else {
+        await this.plugin.app.vault.create('OBSIUS.md', content);
+      }
+      
+    } catch (error) {
+      console.error('Failed to create fully generated OBSIUS.md:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate completely custom AI instructions with no fixed templates
+   */
+  private async generateCompletelyCustomInstructions(
+    analysisData: AnalysisData,
+    projectProfile: any,
+    language: SupportedLanguage
+  ): Promise<string> {
+    if (!this.agentOrchestrator) {
+      return language === 'ja' ? 
+        'このヴォルトは包括的な知識管理システムとして機能します。詳細なAI分析にはAgentOrchestratorが必要です。' :
+        'This vault serves as a comprehensive knowledge management system. Detailed AI analysis requires AgentOrchestrator to be available.';
+    }
+
+    // Create comprehensive analysis prompt for complete customization
+    const languagePrompts = {
+      ja: this.createJapaneseAnalysisPrompt(analysisData, projectProfile),
+      en: this.createEnglishAnalysisPrompt(analysisData, projectProfile)
+    };
+
+    const analysisPrompt = languagePrompts[language];
+
+    try {
+      const context: ConversationContext = {
+        messages: [],
+        currentFile: undefined,
+        workspaceState: this.getWorkspaceState()
+      };
+      
+      const config: AgentConfig = {
+        maxTokens: 4000, // Increased for complete generation
+        streaming: false,
+        temperature: 0.15 // Lower for more focused, practical output
+      };
+      
+      const aiResponse = await this.agentOrchestrator.processMessage(analysisPrompt, context, config);
+      
+      if (aiResponse?.message?.content) {
+        return aiResponse.message.content;
+      } else {
+        return language === 'ja' ?
+          '包括的な分析データが収集されました。AI駆動のインサイトは今後のイテレーションで強化されます。' :
+          'Comprehensive analysis data has been collected. AI-powered insights will be enhanced in future iterations.';
+      }
+      
+    } catch (error) {
+      console.warn('Complete AI generation failed:', error);
+      return language === 'ja' ?
+        '包括的な分析データが収集されました。AI駆動のインサイトは今後のイテレーションで強化されます。' :
+        'Comprehensive analysis data has been collected. AI-powered insights will be enhanced in future iterations.';
+    }
+  }
+
+  /**
+   * Create Japanese analysis prompt for complete customization
+   */
+  private createJapaneseAnalysisPrompt(analysisData: AnalysisData, projectProfile: any): string {
+    const techStackAnalysis = this.analyzeTechnicalContext(analysisData);
+    
+    return `[完全カスタムヴォルト指示生成 - 日本語]
+
+このObsidianヴォルト専用の完全カスタマイズされたAIエージェント指示を生成してください。
+
+## 分析データ概要:
+
+### ヴォルト特性:
+- 複雑度: ${projectProfile.complexity}
+- 組織レベル: ${projectProfile.organizationLevel}
+- 総ファイル数: ${analysisData.vaultStructure.totalFiles}
+- 総フォルダ数: ${analysisData.vaultStructure.totalFolders}
+- ファイルタイプ: ${Array.from(analysisData.vaultStructure.fileTypes.entries()).map(([ext, count]) => `${ext}: ${count}個`).join(', ')}
+
+### 技術環境コンテキスト:
+- 開発スタック: ${techStackAnalysis.techStack}
+- プロジェクトタイプ: ${techStackAnalysis.projectType}
+- 設定ファイル: ${techStackAnalysis.configFiles}
+- 開発パターン: ${techStackAnalysis.developmentPatterns}
+
+### 深層コンテンツ分析結果:
+${this.formatDeepContentAnalysis(analysisData, 'ja')}
+
+### コンテンツパターン:
+- フロントマターフィールド: ${Array.from(analysisData.contentPatterns.frontmatterFields.entries()).map(([field, count]) => `${field} (${count})`).join(', ')}
+- タグカテゴリ: ${Array.from(analysisData.contentPatterns.tagCategories.entries()).map(([tag, count]) => `${tag} (${count})`).join(', ')}
+- 命名規則: ${analysisData.contentPatterns.namingConventions.join(', ')}
+
+### 発見されたインサイト:
+- 主要ドメイン: ${analysisData.insights.primaryDomains.join(', ')}
+- ワークフローパターン: ${analysisData.insights.workflowPatterns.join(', ')}
+- 組織原則: ${analysisData.insights.organizationPrinciples.join(', ')}
+
+### プロジェクト特性:
+- 推定分析時間: ${projectProfile.estimatedAnalysisTime}分
+- 特殊ノード: ${projectProfile.specializedNodes?.join(', ') || 'なし'}
+- スケール課題: ${projectProfile.scaleChallenges?.join(', ') || 'なし'}
+
+## 強化された生成要件:
+1. 固定テンプレートなし - 完全にカスタム構造を作成
+2. ヴォルト固有の見出しを実際のコンテンツに基づいて作成
+3. 自然な日本語での説明
+4. 観察されたパターンに基づく具体的ワークフロー
+5. 実際のフォルダ/ファイル名を使用した具体例
+6. このヴォルトの正確な特性に基づくドメイン固有ガイダンス
+7. **技術プロジェクト特化** - コード構造、テスト、ビルド設定への配慮
+8. **実行可能ワークフロー** - 具体的なコマンドとステップを含む指示
+9. **開発ライフサイクル統合** - バージョン管理、CI/CD、ドキュメント生成
+10. **知識グラフ密度活用** - 関連性の高いコンテンツ間の接続強化
+
+以下を含む完全なカスタム指示コンテンツを生成してください:
+- ヴォルトの独自側面を反映したカスタムセクションヘッダー
+- このヴォルトの組織化のための具体的ワークフロー
+- 実際のフォルダ/ファイル名を使用した具体例
+- コンテンツ分析に基づくドメイン固有ガイダンス
+- **開発者向けの実行可能な作業手順**
+- **技術ドキュメント管理の最適化案**
+- ユーザーに適した日本語での説明
+
+[技術プロジェクト特化の完全カスタムコンテンツを生成してください]`;
+  }
+
+  /**
+   * Create English analysis prompt for complete customization
+   */
+  private createEnglishAnalysisPrompt(analysisData: AnalysisData, projectProfile: any): string {
+    const techStackAnalysis = this.analyzeTechnicalContext(analysisData);
+    
+    return `[COMPLETE CUSTOM VAULT INSTRUCTION GENERATION - ENGLISH]
+
+Generate completely customized AI agent instructions specifically for this Obsidian vault. No templates - create entirely custom structure.
+
+## COMPREHENSIVE ANALYSIS DATA:
+
+### Vault Characteristics:
+- Complexity: ${projectProfile.complexity}
+- Organization Level: ${projectProfile.organizationLevel}
+- Total Files: ${analysisData.vaultStructure.totalFiles}
+- Total Folders: ${analysisData.vaultStructure.totalFolders}
+- File Types: ${Array.from(analysisData.vaultStructure.fileTypes.entries()).map(([ext, count]) => `${ext}: ${count} files`).join(', ')}
+
+### Technical Environment Context:
+- Development Stack: ${techStackAnalysis.techStack}
+- Project Type: ${techStackAnalysis.projectType}
+- Configuration Files: ${techStackAnalysis.configFiles}
+- Development Patterns: ${techStackAnalysis.developmentPatterns}
+
+### Deep Content Analysis Results:
+${this.formatDeepContentAnalysis(analysisData, 'en')}
+
+### Content Patterns:
+- Frontmatter Fields: ${Array.from(analysisData.contentPatterns.frontmatterFields.entries()).map(([field, count]) => `${field} (${count})`).join(', ')}
+- Tag Categories: ${Array.from(analysisData.contentPatterns.tagCategories.entries()).map(([tag, count]) => `${tag} (${count})`).join(', ')}
+- Naming Conventions: ${analysisData.contentPatterns.namingConventions.join(', ')}
+
+### Discovered Insights:
+- Primary Domains: ${analysisData.insights.primaryDomains.join(', ')}
+- Workflow Patterns: ${analysisData.insights.workflowPatterns.join(', ')}
+- Organization Principles: ${analysisData.insights.organizationPrinciples.join(', ')}
+
+### Project Profile:
+- Estimated Analysis Time: ${projectProfile.estimatedAnalysisTime} minutes
+- Specialized Nodes: ${projectProfile.specializedNodes?.join(', ') || 'None'}
+- Scale Challenges: ${projectProfile.scaleChallenges?.join(', ') || 'None'}
+
+## ENHANCED GENERATION REQUIREMENTS:
+1. NO FIXED TEMPLATES - create entirely custom structure
+2. VAULT-SPECIFIC headings based on actual content analysis
+3. Natural English explanations appropriate for this vault
+4. CONCRETE workflows based on observed patterns
+5. SPECIFIC examples using actual folder/file names found
+6. DOMAIN-SPECIFIC guidance based on content analysis
+7. ACTIONABLE instructions for this exact vault configuration
+8. **TECHNICAL PROJECT SPECIALIZATION** - Code structure, testing, build configuration awareness
+9. **EXECUTABLE WORKFLOWS** - Include specific commands and step-by-step procedures
+10. **DEVELOPMENT LIFECYCLE INTEGRATION** - Version control, CI/CD, documentation generation
+11. **KNOWLEDGE GRAPH DENSITY UTILIZATION** - Strengthen connections between related content
+
+Generate complete custom instruction content including:
+- Custom section headers reflecting vault's unique aspects
+- Specific workflows for this vault's organization patterns
+- Concrete examples using actual folder/file names discovered
+- Domain-specific guidance based on content analysis findings
+- **Developer-oriented executable procedures**
+- **Technical documentation management optimization**
+- Optimization recommendations based on scale analysis
+- Vault-specific constraints and operational guidelines
+
+[GENERATE TECHNICAL PROJECT-SPECIALIZED COMPLETELY CUSTOM CONTENT]`;
+  }
+
+  /**
+   * Format deep content analysis results for AI prompt
+   */
+  private formatDeepContentAnalysis(analysisData: AnalysisData, language: 'ja' | 'en'): string {
+    if (!analysisData.deepContent) {
+      return language === 'ja' ? 
+        '- 深層分析データ: 利用不可（基本分析のみ実行）' :
+        '- Deep analysis data: Not available (basic analysis only)';
+    }
+
+    const { folderSummaries, readFiles, documentTypes, contentCategories } = analysisData.deepContent;
+
+    const sections = [];
+
+    // Folder structure analysis
+    if (folderSummaries.length > 0) {
+      const folderInfo = language === 'ja' ?
+        `- フォルダ構造: ${folderSummaries.length}フォルダを詳細分析` :
+        `- Folder structure: ${folderSummaries.length} folders analyzed in detail`;
+      
+      const topFolders = folderSummaries
+        .sort((a, b) => b.totalMarkdownFiles - a.totalMarkdownFiles)
+        .slice(0, 5)
+        .map(f => `${f.folderPath} (${f.totalMarkdownFiles}ファイル, ${f.organizationPattern})`)
+        .join(', ');
+      
+      sections.push(folderInfo);
+      sections.push(language === 'ja' ? 
+        `- 主要フォルダ: ${topFolders}` :
+        `- Key folders: ${topFolders}`);
+    }
+
+    // File content analysis
+    if (readFiles.length > 0) {
+      sections.push(language === 'ja' ?
+        `- 読み取りファイル: ${readFiles.length}ファイルの完全コンテンツ分析` :
+        `- Read files: ${readFiles.length} files with complete content analysis`);
+      
+      // Sample representative files
+      const sampleFiles = readFiles.slice(0, 3).map(f => f.path).join(', ');
+      sections.push(language === 'ja' ?
+        `- 代表ファイル例: ${sampleFiles}` :
+        `- Representative files: ${sampleFiles}`);
+    }
+
+    // Document type distribution
+    if (documentTypes.size > 0) {
+      const docTypeInfo = Array.from(documentTypes.entries())
+        .map(([type, count]) => `${type} (${count})`)
+        .join(', ');
+      sections.push(language === 'ja' ?
+        `- 文書タイプ: ${docTypeInfo}` :
+        `- Document types: ${docTypeInfo}`);
+    }
+
+    // Content categories per folder
+    if (contentCategories.size > 0) {
+      const categoryInfo = Array.from(contentCategories.entries())
+        .slice(0, 3)
+        .map(([folder, files]) => `${folder}: ${files.length}ファイル`)
+        .join(', ');
+      sections.push(language === 'ja' ?
+        `- フォルダ別コンテンツ: ${categoryInfo}` :
+        `- Content by folder: ${categoryInfo}`);
+    }
+
+    return sections.join('\n');
+  }
+
+  /**
+   * Analyze technical context from vault structure
+   */
+  private analyzeTechnicalContext(analysisData: AnalysisData): {
+    techStack: string;
+    projectType: string;
+    configFiles: string;
+    developmentPatterns: string;
+  } {
+    const fileTypes = analysisData.vaultStructure.fileTypes;
+    const insights = analysisData.insights;
+    
+    // Detect tech stack
+    let techStack = 'Unknown';
+    if (fileTypes.has('ts')) {
+      techStack = 'TypeScript/Node.js';
+      if (fileTypes.has('tsx') || fileTypes.has('jsx')) {
+        techStack += '/React';
+      }
+    } else if (fileTypes.has('js')) {
+      techStack = 'JavaScript/Node.js';
+    } else if (fileTypes.has('py')) {
+      techStack = 'Python';
+    } else if (fileTypes.has('java')) {
+      techStack = 'Java';
+    } else if (fileTypes.has('md')) {
+      techStack = 'Documentation/Knowledge Management';
+    }
+    
+    // Detect project type
+    let projectType = 'General Project';
+    if (insights.workflowPatterns.some(p => p.includes('plugin') || p.includes('extension'))) {
+      projectType = 'Plugin/Extension Development';
+    } else if (insights.workflowPatterns.some(p => p.includes('API') || p.includes('server'))) {
+      projectType = 'API/Backend Development';
+    } else if (insights.workflowPatterns.some(p => p.includes('documentation'))) {
+      projectType = 'Documentation Project';
+    } else if (fileTypes.has('ts') && fileTypes.get('ts')! > 10) {
+      projectType = 'TypeScript Application';
+    }
+    
+    // Detect config files
+    const configTypes: string[] = [];
+    if (fileTypes.has('json')) configTypes.push('JSON configs');
+    if (fileTypes.has('yaml') || fileTypes.has('yml')) configTypes.push('YAML configs');
+    if (fileTypes.has('toml')) configTypes.push('TOML configs');
+    const configFiles = configTypes.length > 0 ? configTypes.join(', ') : 'Minimal configuration';
+    
+    // Detect development patterns
+    const patterns: string[] = [];
+    if (insights.organizationPrinciples.some(p => p.includes('test'))) {
+      patterns.push('Test-driven development');
+    }
+    if (insights.organizationPrinciples.some(p => p.includes('documentation'))) {
+      patterns.push('Documentation-driven');
+    }
+    if (insights.workflowPatterns.some(p => p.includes('modular') || p.includes('component'))) {
+      patterns.push('Modular architecture');
+    }
+    const developmentPatterns = patterns.length > 0 ? patterns.join(', ') : 'Standard development patterns';
+    
+    return {
+      techStack,
+      projectType,
+      configFiles,
+      developmentPatterns
+    };
+  }
+
+  /**
+   * Create enhanced OBSIUS.md file from comprehensive analysis data (legacy method)
    */
   private async createEnhancedObsiusMdFile(analysisData: AnalysisData): Promise<void> {
     try {

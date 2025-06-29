@@ -76,8 +76,17 @@ export class ReadManyFilesTool extends BaseTool<ReadManyFilesParams> {
   /**
    * Validate file paths are within vault and not absolute
    */
-  private validatePaths(paths: string[]): string | null {
-    for (const filePath of paths) {
+  private validatePaths(paths: any[]): string | null {
+    // First, ensure all items are strings
+    for (let i = 0; i < paths.length; i++) {
+      const item = paths[i];
+      if (typeof item !== 'string') {
+        return `Path at index ${i} must be a string. Received: ${typeof item} (${JSON.stringify(item)})`;
+      }
+    }
+
+    // Now validate each string path
+    for (const filePath of paths as string[]) {
       // Check for absolute paths
       if (filePath.startsWith('/') || filePath.includes('..') || filePath.startsWith('\\')) {
         return `File path '${filePath}' must be relative to vault root and cannot contain '..' or be absolute`;
